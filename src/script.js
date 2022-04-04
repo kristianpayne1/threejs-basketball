@@ -3,9 +3,10 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as dat from 'lil-gui'
+import * as CANNON from 'cannon-es'
 
 let parameters, scene, controls, renderer, camera, gltfLoader, clock;
-let mixer, previousTime;
+let previousTime, world, directionalLight, ambientLight, objectsToUpdate;
 
 /**
  * Initialise scene
@@ -44,14 +45,14 @@ const init = () => {
      * Camera
      */
     camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100)
-    camera.position.z = 3
+    camera.position.set(2.5, 1., 0)
     scene.add(camera)
 
     /**
      * Controls
      */
     controls = new OrbitControls(camera, canvas)
-    controls.target.set(1, 0, 1)
+    controls.target.set(0, 1.5, 0)
     controls.enableDamping = true
     controls.enabled = false
 
@@ -69,12 +70,140 @@ const init = () => {
     renderer.physicallyCorrectLights = true;
     renderer.outputEncoding = THREE.sRGBEncoding;
 
+    /**
+     * Initialise physics
+     */
+    initialisePhysics();
+
     // Populate scene
     createGUI();
     createLights();
+    createObjects();
     
     // Let's get things rolling...
     tick();
+}
+
+const createObjects = () => {
+    objectsToUpdate = [];
+
+    createFloor();
+    createBall();
+    createHoop();
+}
+
+const createFloor = () => {
+    // Floor
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(20, 10),
+        new THREE.MeshStandardMaterial({
+            color: '#777777',
+            metalness: 0.3,
+            roughness: 0.4,
+        })
+    )
+    floor.receiveShadow = true
+    floor.rotation.x = - Math.PI * 0.5
+    scene.add(floor)
+
+    // Floor physics
+    const floorShape = new CANNON.Plane()
+    const floorBody = new CANNON.Body()
+    floorBody.mass = 0
+    floorBody.addShape(floorShape)
+    floorBody.quaternion.setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5) 
+    world.addBody(floorBody)
+}
+
+const createBall = () => {
+     const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 20), new THREE.MeshStandardMaterial({
+        metalness: 0,
+        roughness: 0.7,
+         color: '#6E260E'
+    }))
+    mesh.castShadow = true
+    mesh.scale.set(parameters.radius, parameters.radius, parameters.radius)
+    scene.add(mesh)
+
+    const sphereShape = new CANNON.Sphere(parameters.radius)
+
+    const sphereBody = new CANNON.Body({
+        mass: 1,
+        position: new CANNON.Vec3(0.1, 2, 0),
+        shape: sphereShape,
+    });
+
+    world.addBody(sphereBody)
+
+    objectsToUpdate.push({ mesh, body: sphereBody })
+}
+
+const createHoop = () => {
+    // Hoop
+    const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.305, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
+        metalness: 0.7,
+        roughness: 0.3,
+        color: '#ff0000'
+    }));
+    hoop.castShadow = true
+    scene.add( hoop );
+
+    const hoopShape = CANNON.Trimesh.createTorus(0.305, 0.025, 16, 100);
+    const hoopBody = new CANNON.Body({ mass: 0 });
+    hoopBody.position.set(0, 1, 0);
+    hoopBody.addShape(hoopShape);
+    hoopBody.quaternion.setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5) 
+    world.addBody(hoopBody);
+
+    objectsToUpdate.push({ mesh: hoop, body: hoopBody })
+
+    // Backboard
+    const board = new THREE.Mesh(
+        new THREE.BoxGeometry(1.825, 1.219, 0.03),
+        new THREE.MeshStandardMaterial({
+            color: '#ffffff',
+            metalness: 0.5,
+            roughness: 0.3,
+        })
+    )
+    board.receiveShadow = true
+    board.castShadow = true
+    board.rotation.y = Math.PI * 0.5
+    scene.add(board)
+
+    // Floor physics
+    const boardShape = new CANNON.Box(new CANNON.Vec3(1.825, 1.219, 0.03))
+    const boardBody = new CANNON.Body()
+    boardBody.mass = 0
+    boardBody.addShape(boardShape)
+    boardBody.position.set(-0.32, 1.23, 0);
+    boardBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI * 0.5) 
+    world.addBody(boardBody)
+
+    objectsToUpdate.push({ mesh: board, body: boardBody })
+
+}
+
+/**
+ * Physics
+ */
+const initialisePhysics = () => {
+    world = new CANNON.World()
+    world.gravity.set(0, - 9.82, 0);
+    world.broadphase = new CANNON.SAPBroadphase(world)
+    world.allowSleep = true
+  
+    // Default material
+    const defaultMaterial = new CANNON.Material('default')
+    const defaultContactMaterial = new CANNON.ContactMaterial(
+        defaultMaterial,
+        defaultMaterial,
+        {
+            friction: 0.5,
+            restitution: 0.8
+        }
+    )
+    world.defaultContactMaterial = defaultContactMaterial
 }
 
 /**
@@ -87,20 +216,20 @@ const loadModels = () => {
  * Lights
 */
 const createLights = () => {
-     const ambientLight = new THREE.AmbientLight(parameters.ambientLightColor, parameters.ambientLightIntensity)
+    ambientLight = new THREE.AmbientLight(parameters.ambientLightColor, parameters.ambientLightIntensity)
 
-     const directionalLight = new THREE.DirectionalLight(parameters.directionalLightColor, parameters.directionalLightIntensity)
-     directionalLight.castShadow = true
-     directionalLight.shadow.mapSize.set(1024, 1024)
-     directionalLight.shadow.camera.far = 15
-     directionalLight.shadow.camera.left = - 7
-     directionalLight.shadow.camera.top = 7
-     directionalLight.shadow.camera.right = 7
-     directionalLight.shadow.camera.bottom = - 7
-     directionalLight.position.set(parameters.directionalLightX, parameters.directionalLightY, parameters.directionalLightZ)
- 
-     scene.add(directionalLight)
-     scene.add(ambientLight)
+    directionalLight = new THREE.DirectionalLight(parameters.directionalLightColor, parameters.directionalLightIntensity)
+    directionalLight.castShadow = true
+    directionalLight.shadow.mapSize.set(1024, 1024)
+    directionalLight.shadow.camera.far = 15
+    directionalLight.shadow.camera.left = - 7
+    directionalLight.shadow.camera.top = 7
+    directionalLight.shadow.camera.right = 7
+    directionalLight.shadow.camera.bottom = - 7
+    directionalLight.position.set(parameters.directionalLightX, parameters.directionalLightY, parameters.directionalLightZ)
+
+    scene.add(directionalLight)
+    scene.add(ambientLight)
 }
 
 /**
@@ -118,6 +247,7 @@ const createGUI = () => {
         directionalLightRotX: 0,
         directionalLightRotY: 0,
         directionalLightRotZ: 0,
+        radius: 0.24
     };
     
     const gui = new dat.GUI()
@@ -161,9 +291,13 @@ const tick = () =>
     const deltaTime = elapsedTime - previousTime
     previousTime = elapsedTime
 
-    if(mixer)
+    // Update physics
+    world.step(1 / 60, deltaTime, 3)
+
+    for(const object of objectsToUpdate)
     {
-        mixer.update(deltaTime)
+        object.mesh.position.copy(object.body.position)
+        object.mesh.quaternion.copy(object.body.quaternion)
     }
 
     // Update controls
