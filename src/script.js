@@ -4,9 +4,11 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as dat from 'lil-gui'
 import * as CANNON from 'cannon-es'
+import CannonDebugger from 'cannon-es-debugger'
 
 let parameters, scene, controls, renderer, camera, gltfLoader, clock;
 let previousTime, world, directionalLight, ambientLight, objectsToUpdate;
+let cannonDebugger, objects
 
 /**
  * Initialise scene
@@ -75,6 +77,21 @@ const init = () => {
      */
     initialisePhysics();
 
+    /**
+     * Debugger
+     */
+     cannonDebugger = new CannonDebugger(scene, world, {
+        onInit(body, mesh) {
+            mesh.visible = false;   
+            // Toggle visibiliy on "d" press
+            document.addEventListener('keydown', (event) => {
+            if (event.key === 'd') {
+                mesh.visible = !mesh.visible
+            }
+            })
+        },
+      })
+
     // Populate scene
     createGUI();
     createLights();
@@ -86,10 +103,11 @@ const init = () => {
 
 const createObjects = () => {
     objectsToUpdate = [];
+    objects = {};
 
-    createFloor();
-    createBall();
-    createHoop();
+    objects.floor = createFloor();
+    objects.ball = createBall();
+    objects.hoop = createHoop();
 }
 
 const createFloor = () => {
@@ -113,6 +131,8 @@ const createFloor = () => {
     floorBody.addShape(floorShape)
     floorBody.quaternion.setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5) 
     world.addBody(floorBody)
+
+    return { mesh: floor, body: floorBody };
 }
 
 const createBall = () => {
@@ -126,38 +146,39 @@ const createBall = () => {
     scene.add(mesh)
 
     const sphereShape = new CANNON.Sphere(parameters.radius)
-
     const sphereBody = new CANNON.Body({
         mass: 1,
-        position: new CANNON.Vec3(0.1, 2, 0),
+        position: new CANNON.Vec3(0.1, 3, 0),
         shape: sphereShape,
     });
 
     world.addBody(sphereBody)
 
-    objectsToUpdate.push({ mesh, body: sphereBody })
+    objectsToUpdate.push({ mesh, body: sphereBody });
+
+    return { mesh, body: sphereBody };
 }
 
 const createHoop = () => {
+    const position = [parameters.hoopPositionX, parameters.hoopPositionY, parameters.hoopPositionZ];
     // Hoop
     const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.305, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
         metalness: 0.7,
         roughness: 0.3,
         color: '#ff0000'
     }));
-    hoop.castShadow = true
+    hoop.castShadow = true;
+    hoop.rotation.x += Math.PI * 0.5
+    hoop.position.set(...position);
     scene.add( hoop );
 
     const hoopShape = CANNON.Trimesh.createTorus(0.305, 0.025, 16, 100);
     const hoopBody = new CANNON.Body({ mass: 0 });
-    hoopBody.position.set(0, 1, 0);
-    hoopBody.addShape(hoopShape);
-    hoopBody.quaternion.setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5) 
-    world.addBody(hoopBody);
-
-    objectsToUpdate.push({ mesh: hoop, body: hoopBody })
+    hoopBody.position.set(...position);
+    hoopBody.addShape(hoopShape, new CANNON.Vec3(0, 0, 0), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5));
 
     // Backboard
+    const boardPosition = [-0.32, 0.23, 0];
     const board = new THREE.Mesh(
         new THREE.BoxGeometry(1.825, 1.219, 0.03),
         new THREE.MeshStandardMaterial({
@@ -166,22 +187,20 @@ const createHoop = () => {
             roughness: 0.3,
         })
     )
+    board.position.set(position[0] + boardPosition[0], position[1] + boardPosition[1], position[2] + boardPosition[2]);
     board.receiveShadow = true
     board.castShadow = true
     board.rotation.y = Math.PI * 0.5
     scene.add(board)
 
     // Floor physics
-    const boardShape = new CANNON.Box(new CANNON.Vec3(1.825, 1.219, 0.03))
-    const boardBody = new CANNON.Body()
-    boardBody.mass = 0
-    boardBody.addShape(boardShape)
-    boardBody.position.set(-0.32, 1.23, 0);
-    boardBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI * 0.5) 
-    world.addBody(boardBody)
+    const boardShape = new CANNON.Box(new CANNON.Vec3(1.825 * 0.5, 1.219 * 0.5, 0.03 * 0.5 ))
+    hoopBody.addShape(boardShape, new CANNON.Vec3(...boardPosition), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI * 0.5))
 
-    objectsToUpdate.push({ mesh: board, body: boardBody })
+    world.addBody(hoopBody);
 
+    // objectsToUpdate.push({ mesh: hoop, body: hoopBody })
+    return { mesh: hoop, body: hoopBody };
 }
 
 /**
@@ -247,7 +266,10 @@ const createGUI = () => {
         directionalLightRotX: 0,
         directionalLightRotY: 0,
         directionalLightRotZ: 0,
-        radius: 0.24
+        radius: 0.24,
+        hoopPositionX: 0,
+        hoopPositionY: 0.5,
+        hoopPositionZ: 0,
     };
     
     const gui = new dat.GUI()
@@ -258,11 +280,11 @@ const createGUI = () => {
      */
     let showGUI = false;
     window.addEventListener('keydown', (e) => {
-        if (e.key == 'c') {
+        if (e.key == 'x') {
             showGUI ? gui.hide() : gui.show();
             showGUI = !showGUI;
         }
-        if (e.key === 'd') {
+        if (e.key === 'c') {
             controls.enabled = !controls.enabled
         }
     })
@@ -280,6 +302,23 @@ const createGUI = () => {
     lightsFolder.add(parameters, "directionalLightRotY", - Math.PI, Math.PI, 0.1).onChange(() => directionalLight.rotation.set(parameters.directionalLightRotX, parameters.directionalLightRotY, parameters.directionalLightRotZ))
     lightsFolder.add(parameters, "directionalLightRotZ", - Math.PI, Math.PI, 0.1).onChange(() => directionalLight.rotation.set(parameters.directionalLightRotX, parameters.directionalLightRotY, parameters.directionalLightRotZ))
 
+    const objectFolder = gui.addFolder('Objects')
+
+    objectFolder.add(parameters, 'radius', 0.1, 1, 0.1).onChange(() => { 
+        const ball = objects.ball;
+        console.log(ball)
+        ball.mesh.scale.set(parameters.radius, parameters.radius, parameters.radius);
+        ball.body.shapes[0].radius = parameters.radius;
+    })
+    const updateHoopPosition = (axis, value) => {
+        const hoop = objects.hoop;
+        console.log(hoop)
+        hoop.mesh.position[axis] = value;
+
+    }
+    objectFolder.add(parameters, 'hoopPositionX', -10, 10, 0.1).onChange(() => updateHoopPosition('x', parameters.hoopPositionX))
+    objectFolder.add(parameters, 'hoopPositionY', -10, 10, 0.1).onChange(() => updateHoopPosition('y', parameters.hoopPositionY))
+    objectFolder.add(parameters, 'hoopPositionZ', -10, 10, 0.1).onChange(() => updateHoopPosition('z', parameters.hoopPositionZ))
 }
 
 /**
@@ -302,6 +341,9 @@ const tick = () =>
 
     // Update controls
     controls.update()
+    
+    // Update the CannonDebugger meshes
+    cannonDebugger.update()
 
     // Render
     renderer.render(scene, camera)
