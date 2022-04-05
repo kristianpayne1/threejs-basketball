@@ -8,7 +8,7 @@ import CannonDebugger from 'cannon-es-debugger'
 
 let parameters, scene, controls, renderer, camera, gltfLoader, clock;
 let previousTime, world, directionalLight, ambientLight, objectsToUpdate;
-let cannonDebugger, objects
+let cannonDebugger, objects, raycaster, mouse, isHovering, isGrabbing, currentIntersect
 
 /**
  * Initialise scene
@@ -92,10 +92,11 @@ const init = () => {
         },
       })
 
-    // Populate scene
+    // Create stuff
     createGUI();
     createLights();
     createObjects();
+    createControls(sizes);
     
     // Let's get things rolling...
     tick();
@@ -161,6 +162,7 @@ const createBall = () => {
 
 const createHoop = () => {
     const position = [parameters.hoopPositionX, parameters.hoopPositionY, parameters.hoopPositionZ];
+    const mesh = new THREE.Group();
     // Hoop
     const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.305, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
         metalness: 0.7,
@@ -170,7 +172,7 @@ const createHoop = () => {
     hoop.castShadow = true;
     hoop.rotation.x += Math.PI * 0.5
     hoop.position.set(...position);
-    scene.add( hoop );
+    mesh.add( hoop );
 
     const hoopShape = CANNON.Trimesh.createTorus(0.305, 0.025, 16, 100);
     const hoopBody = new CANNON.Body({ mass: 0 });
@@ -191,16 +193,16 @@ const createHoop = () => {
     board.receiveShadow = true
     board.castShadow = true
     board.rotation.y = Math.PI * 0.5
-    scene.add(board)
+    mesh.add(board)
 
-    // Floor physics
     const boardShape = new CANNON.Box(new CANNON.Vec3(1.825 * 0.5, 1.219 * 0.5, 0.03 * 0.5 ))
     hoopBody.addShape(boardShape, new CANNON.Vec3(...boardPosition), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI * 0.5))
 
     world.addBody(hoopBody);
+    scene.add(mesh)
 
     // objectsToUpdate.push({ mesh: hoop, body: hoopBody })
-    return { mesh: hoop, body: hoopBody };
+    return { mesh, body: hoopBody };
 }
 
 /**
@@ -267,8 +269,8 @@ const createGUI = () => {
         directionalLightRotY: 0,
         directionalLightRotZ: 0,
         radius: 0.24,
-        hoopPositionX: 0,
-        hoopPositionY: 0.5,
+        hoopPositionX: -3,
+        hoopPositionY: 3,
         hoopPositionZ: 0,
     };
     
@@ -312,13 +314,70 @@ const createGUI = () => {
     })
     const updateHoopPosition = (axis, value) => {
         const hoop = objects.hoop;
-        console.log(hoop)
         hoop.mesh.position[axis] = value;
+        hoop.body.position[axis] = value;
 
     }
     objectFolder.add(parameters, 'hoopPositionX', -10, 10, 0.1).onChange(() => updateHoopPosition('x', parameters.hoopPositionX))
     objectFolder.add(parameters, 'hoopPositionY', -10, 10, 0.1).onChange(() => updateHoopPosition('y', parameters.hoopPositionY))
     objectFolder.add(parameters, 'hoopPositionZ', -10, 10, 0.1).onChange(() => updateHoopPosition('z', parameters.hoopPositionZ))
+}
+
+/**
+ * Controls
+ */
+const createControls = (sizes) => {
+    mouse = new THREE.Vector2();
+    raycaster = new THREE.Raycaster();
+
+    window.addEventListener('mousemove', (event) =>
+    {
+        mouse.x = event.clientX / sizes.width * 2 - 1
+        mouse.y = - (event.clientY / sizes.height) * 2 + 1
+    })
+
+    window.addEventListener('mousedown', () => {
+        if (isHovering && !isGrabbing) {
+            document.body.style.cursor = 'grabbing';
+            isGrabbing = true;
+        }
+    })
+
+    window.addEventListener('mouseup', () => {
+        if (isGrabbing) {
+            document.body.style.cursor = 'grab';
+            isGrabbing = false;
+        }
+    })
+}
+
+const updateControls = () => {
+    raycaster.setFromCamera(mouse, camera);
+
+    const ball = objects.ball;
+    const intersects = raycaster.intersectObjects([ball.mesh]);
+
+    if (intersects.length > 0) {
+        if (!currentIntersect)
+        {
+            document.body.style.cursor = 'grab';
+            isHovering = true;
+        } else if (isGrabbing) {
+            updateBallPosition([mouse.x, mouse.y, 0]);
+        }
+        currentIntersect = ball;
+    } else {
+        if (currentIntersect)
+        {
+            document.body.style.cursor = 'default';
+            isHovering = false;
+        }
+        currentIntersect = null;
+    }
+}
+
+const updateBallPosition = (targetPosition) => {
+
 }
 
 /**
@@ -339,8 +398,11 @@ const tick = () =>
         object.mesh.quaternion.copy(object.body.quaternion)
     }
 
-    // Update controls
+    // Update camera controls
     controls.update()
+
+    // Update controls
+    updateControls();
     
     // Update the CannonDebugger meshes
     cannonDebugger.update()
