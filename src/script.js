@@ -341,14 +341,16 @@ const createControls = (sizes) => {
             document.body.style.cursor = 'grabbing';
             isGrabbing = true;
         }
-    })
+    }, false)
 
     window.addEventListener('mouseup', () => {
-        if (isGrabbing) {
+        if (isGrabbing && isHovering) {
             document.body.style.cursor = 'grab';
-            isGrabbing = false;
+        } else if (!isHovering) {
+            document.body.style.cursor = 'default';
         }
-    })
+        isGrabbing = false;
+    }, false)
 }
 
 const updateControls = () => {
