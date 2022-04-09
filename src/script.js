@@ -377,7 +377,6 @@ const onMouseUp = () => {
         document.body.style.cursor = 'default';
     }
     removeJointConstraint();
-    console.log(ballBody.velocity.normalize());
 
     isGrabbing = false;
 }
