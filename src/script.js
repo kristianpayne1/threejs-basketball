@@ -8,7 +8,8 @@ import CannonDebugger from 'cannon-es-debugger'
 
 let parameters, scene, controls, renderer, camera, gltfLoader, clock;
 let previousTime, world, directionalLight, ambientLight, objectsToUpdate;
-let cannonDebugger, objects, raycaster, mouse, isHovering, isGrabbing, currentIntersect
+let cannonDebugger, objects, raycaster, mouse, isGrabbing, currentIntersect
+let gplane, jointBody, mouseConstraint, constrainedBody, sizes;
 
 /**
  * Initialise scene
@@ -23,7 +24,7 @@ const init = () => {
     /**
      * Sizes
      */
-    const sizes = {
+    sizes = {
         width: window.innerWidth,
         height: window.innerHeight
     }
@@ -109,6 +110,16 @@ const createObjects = () => {
     objects.floor = createFloor();
     objects.ball = createBall();
     objects.hoop = createHoop();
+
+    // Joint body
+    const shape = new CANNON.Particle();
+    jointBody = new CANNON.Body({
+        mass: 0
+    });
+    jointBody.addShape(shape);
+    jointBody.collisionFilterGroup = 0;
+    jointBody.collisionFilterMask = 0;
+    world.addBody(jointBody)
 }
 
 const createFloor = () => {
@@ -149,9 +160,10 @@ const createBall = () => {
     const sphereShape = new CANNON.Sphere(parameters.radius)
     const sphereBody = new CANNON.Body({
         mass: 1,
-        position: new CANNON.Vec3(0.1, 3, 0),
+        position: new CANNON.Vec3(0.1, 1, 0),
         shape: sphereShape,
     });
+    sphereBody.sleep()
 
     world.addBody(sphereBody)
 
@@ -326,31 +338,48 @@ const createGUI = () => {
 /**
  * Controls
  */
-const createControls = (sizes) => {
+const createControls = () => {
     mouse = new THREE.Vector2();
     raycaster = new THREE.Raycaster();
 
-    window.addEventListener('mousemove', (event) =>
-    {
-        mouse.x = event.clientX / sizes.width * 2 - 1
-        mouse.y = - (event.clientY / sizes.height) * 2 + 1
-    })
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mousedown', onMouseDown, false)
+    window.addEventListener('mouseup', onMouseUp, false)
+}
 
-    window.addEventListener('mousedown', () => {
-        if (isHovering && !isGrabbing) {
-            document.body.style.cursor = 'grabbing';
-            isGrabbing = true;
-        }
-    }, false)
+const onMouseMove = (event) => {
+    mouse.x = event.clientX / sizes.width * 2 - 1;
+    mouse.y = - (event.clientY / sizes.height) * 2 + 1;
+    if (gplane && mouseConstraint) {
+        const pos = projectOntoPlane();
+        moveJointToPoint(pos.x, pos.y, pos.z);
+    }
+}
 
-    window.addEventListener('mouseup', () => {
-        if (isGrabbing && isHovering) {
-            document.body.style.cursor = 'grab';
-        } else if (!isHovering) {
-            document.body.style.cursor = 'default';
-        }
-        isGrabbing = false;
-    }, false)
+const onMouseDown = () => {
+    const ballBody = objects.ball.body;
+    if (currentIntersect && !isGrabbing) {
+        document.body.style.cursor = 'grabbing';
+        isGrabbing = true;
+
+        const pos = currentIntersect.point;
+        pos.x = 0;
+        setScreenPerpCenter(pos);
+        addMouseConstraint(pos.x, pos.y, pos.z, ballBody);
+    }
+}
+
+const onMouseUp = () => {
+    const ballBody = objects.ball.body;
+    if (isGrabbing && currentIntersect) {
+        document.body.style.cursor = 'grab';
+    } else if (!currentIntersect) {
+        document.body.style.cursor = 'default';
+    }
+    removeJointConstraint();
+    console.log(ballBody.velocity.normalize());
+
+    isGrabbing = false;
 }
 
 const updateControls = () => {
@@ -363,24 +392,71 @@ const updateControls = () => {
         if (!currentIntersect)
         {
             document.body.style.cursor = 'grab';
-            isHovering = true;
-        } else if (isGrabbing) {
-            updateBallPosition([mouse.x, mouse.y, 0]);
         }
-        currentIntersect = ball;
-    } else {
+        currentIntersect = intersects[0];
+    } else if(!isGrabbing) {
         if (currentIntersect)
         {
             document.body.style.cursor = 'default';
-            isHovering = false;
         }
         currentIntersect = null;
     }
 }
 
-const updateBallPosition = (targetPosition) => {
-
+// This function creates a virtual movement plane for the mouseJoint to move in
+const setScreenPerpCenter = (point) => {
+    // If it does not exist, create a new one
+    if (!gplane) {
+      const planeGeo = new THREE.PlaneGeometry(100, 100);
+      const plane = gplane = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({
+        color: 0x777777
+      }));
+      plane.visible = false; // Hide it..
+      scene.add(gplane);
+    }
+  
+    // Center at mouse position
+    gplane.position.copy(point);
+  
+    // Make it face toward the camera
+    gplane.quaternion.copy(camera.quaternion);
 }
+
+const addMouseConstraint = (x, y, z, body) => {
+    // The cannon body constrained by the mouse joint
+    constrainedBody = body;
+
+    // Move the cannon click marker particle to the click position
+    jointBody.position.set(x, y, z);
+  
+    // Create a new constraint
+    // The pivot for the jointBody is zero
+    mouseConstraint = new CANNON.PointToPointConstraint(constrainedBody, new CANNON.Vec3(0, 0, 0), jointBody, new CANNON.Vec3(0, 0, 0));
+  
+    // Add the constriant to world
+    world.addConstraint(mouseConstraint);
+  }
+  
+  // This functions moves the transparent joint body to a new postion in space
+const moveJointToPoint = (x, y, z) => {
+    // Move the joint body to a new position
+    jointBody.position.set(x, y, z);
+    mouseConstraint.update();
+}
+  
+const removeJointConstraint = () => {
+    // Remove constriant from world
+    world.removeConstraint(mouseConstraint);
+    mouseConstraint = false;
+}
+
+const projectOntoPlane = () => {
+    // project mouse to that plane
+    const hit = raycaster.intersectObjects([gplane])[0];
+    if (hit)
+      return hit.point;
+    return false;
+  }
 
 /**
  * Animate scene
