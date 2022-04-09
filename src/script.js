@@ -48,7 +48,7 @@ const init = () => {
      * Camera
      */
     camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100)
-    camera.position.set(2.5, 1., 0)
+    camera.position.set(2, 1., 0)
     scene.add(camera)
 
     /**
@@ -160,7 +160,7 @@ const createBall = () => {
     const sphereShape = new CANNON.Sphere(parameters.radius)
     const sphereBody = new CANNON.Body({
         mass: 1,
-        position: new CANNON.Vec3(0.1, 1, 0),
+        position: new CANNON.Vec3(0, 1.25, 0),
         shape: sphereShape,
     });
     sphereBody.sleep()
@@ -176,7 +176,7 @@ const createHoop = () => {
     const position = [parameters.hoopPositionX, parameters.hoopPositionY, parameters.hoopPositionZ];
     const mesh = new THREE.Group();
     // Hoop
-    const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.305, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
+    const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.35, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
         metalness: 0.7,
         roughness: 0.3,
         color: '#ff0000'
@@ -186,13 +186,13 @@ const createHoop = () => {
     hoop.position.set(...position);
     mesh.add( hoop );
 
-    const hoopShape = CANNON.Trimesh.createTorus(0.305, 0.025, 16, 100);
+    const hoopShape = CANNON.Trimesh.createTorus(0.35, 0.025, 16, 100);
     const hoopBody = new CANNON.Body({ mass: 0 });
     hoopBody.position.set(...position);
     hoopBody.addShape(hoopShape, new CANNON.Vec3(0, 0, 0), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5));
 
     // Backboard
-    const boardPosition = [-0.32, 0.23, 0];
+    const boardPosition = [-0.36, 0.23, 0];
     const board = new THREE.Mesh(
         new THREE.BoxGeometry(1.825, 1.219, 0.03),
         new THREE.MeshStandardMaterial({
@@ -233,7 +233,7 @@ const initialisePhysics = () => {
         defaultMaterial,
         {
             friction: 0.5,
-            restitution: 0.8
+            restitution: 0.7
         }
     )
     world.defaultContactMaterial = defaultContactMaterial
@@ -281,7 +281,7 @@ const createGUI = () => {
         directionalLightRotY: 0,
         directionalLightRotZ: 0,
         radius: 0.24,
-        hoopPositionX: -3,
+        hoopPositionX: -2.5,
         hoopPositionY: 3,
         hoopPositionZ: 0,
     };
@@ -364,6 +364,8 @@ const onMouseDown = () => {
 
         const pos = currentIntersect.point;
         pos.x = 0;
+        ballBody.angularVelocity = new CANNON.Vec3(0, 0, 0)
+        console.log
         setScreenPerpCenter(pos);
         addMouseConstraint(pos.x, pos.y, pos.z, ballBody);
     }
@@ -373,11 +375,12 @@ const onMouseUp = () => {
     const ballBody = objects.ball.body;
     if (isGrabbing && currentIntersect) {
         document.body.style.cursor = 'grab';
+        const throwDirection = new CANNON.Vec3(ballBody.velocity.x, ballBody.velocity.y, ballBody.velocity.z);
+        ballBody.applyImpulse(new CANNON.Vec3(-Math.min(throwDirection.normalize(), 4), 0, 0), new CANNON.Vec3(0, 0, 0))
     } else if (!currentIntersect) {
         document.body.style.cursor = 'default';
     }
     removeJointConstraint();
-
     isGrabbing = false;
 }
 
