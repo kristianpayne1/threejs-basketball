@@ -10,6 +10,7 @@ let parameters, scene, controls, renderer, camera, gltfLoader, clock;
 let previousTime, world, directionalLight, ambientLight, objectsToUpdate;
 let cannonDebugger, objects, raycaster, mouse, isGrabbing, currentIntersect
 let gplane, jointBody, mouseConstraint, constrainedBody, sizes;
+let bounceSounds, hoopHitSounds;
 
 /**
  * Initialise scene
@@ -50,6 +51,13 @@ const init = () => {
     camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100)
     camera.position.set(2, 1., 0)
     scene.add(camera)
+
+    /**
+     * Audio
+     */
+    const listener = new THREE.AudioListener();
+    camera.add( listener );
+    loadAudioFiles( listener );
 
     /**
      * Controls
@@ -163,12 +171,11 @@ const createBall = () => {
         position: new CANNON.Vec3(0, 1.25, 0),
         shape: sphereShape,
     });
-    sphereBody.sleep()
-
+    sphereBody.sleep();
+    sphereBody.addEventListener('collide', playBounceSound)
     world.addBody(sphereBody)
 
     objectsToUpdate.push({ mesh, body: sphereBody });
-
     return { mesh, body: sphereBody };
 }
 
@@ -210,6 +217,7 @@ const createHoop = () => {
     const boardShape = new CANNON.Box(new CANNON.Vec3(1.825 * 0.5, 1.219 * 0.5, 0.03 * 0.5 ))
     hoopBody.addShape(boardShape, new CANNON.Vec3(...boardPosition), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI * 0.5))
 
+    hoopBody.addEventListener('collide', playHoopHitSound)
     world.addBody(hoopBody);
     scene.add(mesh)
 
@@ -247,9 +255,67 @@ const loadModels = () => {
 }
 
 /**
- * 
+ *  Audio
  */
+const loadAudioFiles = (listener) => {
+    const audioLoader = new THREE.AudioLoader();
+    bounceSounds = [];
+    hoopHitSounds = [];
+    // Load bounce sounds
+    for (let i = 1; i <= 7; i++) {
+        const bounceSound = new THREE.PositionalAudio( listener );
+        audioLoader.load(`sfx/bounce${i}.mp3`, ( buffer ) => {
+            bounceSound.setBuffer(buffer);
+            bounceSound.setRefDistance( 2 );
+            bounceSounds.push(bounceSound);
+            objects.ball.mesh.add(bounceSound)
+        });
+    }
+    // Load hoop hit sounds
+    for (let i = 1; i <= 3; i++) {
+        const hoopHitSound = new THREE.PositionalAudio( listener );
+        audioLoader.load(`sfx/hoophit${i}.mp3`, ( buffer ) => {
+            hoopHitSound.setBuffer(buffer);
+            hoopHitSound.setRefDistance( 2 );
+            hoopHitSounds.push(hoopHitSound);
+            objects.hoop.mesh.add(hoopHitSound)
+        });
+    }
+}
 
+let isPlayingBounceSound = false;
+const playBounceSound = (collision) => {
+    if (!isPlayingBounceSound) {
+        const impactStrength = Math.min(collision.contact.getImpactVelocityAlongNormal(), 10);
+        if(impactStrength > 0.5) {
+            isPlayingBounceSound = true;
+            const hitSound = bounceSounds[Math.floor(Math.random() * bounceSounds.length)];
+            hitSound.setVolume(impactStrength / 10);
+            hitSound.play();
+            setTimeout(() => {
+                isPlayingBounceSound = false;
+            }, hitSound.buffer.duration)
+        }
+    }
+}
+
+let isPlayingHoopHitSound = false;
+const playHoopHitSound = (collision) => {
+    if (!isPlayingHoopHitSound) {
+        const impactStrength = Math.min(collision.contact.getImpactVelocityAlongNormal(), 10);
+        if(impactStrength > 1) {
+            isPlayingHoopHitSound = true;
+            const hitSound = hoopHitSounds[Math.floor(Math.random() * hoopHitSounds.length)];
+            hitSound.setVolume(impactStrength / 10);
+            hitSound.play();
+            setTimeout(() => {
+                isPlayingHoopHitSound = false;
+            },  hitSound.buffer.duration)
+            
+        }
+    }
+}
+ 
 /** 
  * Lights
 */
