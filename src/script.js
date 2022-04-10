@@ -245,6 +245,11 @@ const initialisePhysics = () => {
 const loadModels = () => {
     gltfLoader = new GLTFLoader()
 }
+
+/**
+ * 
+ */
+
 /** 
  * Lights
 */
@@ -458,7 +463,7 @@ const projectOntoPlane = () => {
     if (hit)
       return hit.point;
     return false;
-  }
+}
 
 /**
  * Animate scene
