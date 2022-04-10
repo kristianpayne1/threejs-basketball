@@ -6,11 +6,11 @@ import * as dat from 'lil-gui'
 import * as CANNON from 'cannon-es'
 import CannonDebugger from 'cannon-es-debugger'
 
-let parameters, scene, controls, renderer, camera, gltfLoader, clock;
-let previousTime, world, directionalLight, ambientLight, objectsToUpdate;
-let cannonDebugger, objects, raycaster, mouse, isGrabbing, currentIntersect
+let parameters, scene, controls, renderer, camera, clock;
+let previousTime, world, directionalLight, ambientLight, objectsToUpdate = [];
+let cannonDebugger, objects = {}, raycaster, mouse, isGrabbing, currentIntersect
 let gplane, jointBody, mouseConstraint, constrainedBody, sizes;
-let bounceSounds, hoopHitSounds;
+let bounceSounds, hoopHitSounds, ballModel;
 
 /**
  * Initialise scene
@@ -57,7 +57,6 @@ const init = () => {
      */
     const listener = new THREE.AudioListener();
     camera.add( listener );
-    loadAudioFiles( listener );
 
     /**
      * Controls
@@ -104,17 +103,18 @@ const init = () => {
     // Create stuff
     createGUI();
     createLights();
-    createObjects();
-    createControls(sizes);
+    loadModels()
+        .then(() => {
+            createObjects();
+            loadAudioFiles( listener );
+            createControls(sizes);
     
-    // Let's get things rolling...
-    tick();
+            // Let's get things rolling...
+            tick();
+        });
 }
 
 const createObjects = () => {
-    objectsToUpdate = [];
-    objects = {};
-
     objects.floor = createFloor();
     objects.ball = createBall();
     objects.hoop = createHoop();
@@ -156,13 +156,9 @@ const createFloor = () => {
 }
 
 const createBall = () => {
-     const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 20), new THREE.MeshStandardMaterial({
-        metalness: 0,
-        roughness: 0.7,
-         color: '#6E260E'
-    }))
+    const mesh = ballModel;
     mesh.castShadow = true
-    mesh.scale.set(parameters.radius, parameters.radius, parameters.radius)
+    mesh.scale.set(parameters.radius + 0.05, parameters.radius + 0.05, parameters.radius + 0.05);
     scene.add(mesh)
 
     const sphereShape = new CANNON.Sphere(parameters.radius)
@@ -171,6 +167,12 @@ const createBall = () => {
         position: new CANNON.Vec3(0, 1.25, 0),
         shape: sphereShape,
     });
+    var quatX = new CANNON.Quaternion();
+    var quatY = new CANNON.Quaternion();
+    quatX.setFromAxisAngle(new CANNON.Vec3(1,0,0), Math.PI * 0.5);
+    quatY.setFromAxisAngle(new CANNON.Vec3(0,0,1), Math.PI * 0.5);
+    var quaternion = quatY.mult(quatX);
+    sphereBody.quaternion = quaternion
     sphereBody.sleep();
     sphereBody.addEventListener('collide', playBounceSound)
     world.addBody(sphereBody)
@@ -251,7 +253,13 @@ const initialisePhysics = () => {
  * Load models
  */
 const loadModels = () => {
-    gltfLoader = new GLTFLoader()
+    return new Promise((resolve, reject) => {
+        const gltfLoader = new GLTFLoader();
+        gltfLoader.load('basketball/basketball.gltf', (gltf) => {
+            ballModel = gltf.scene.children[0].children[0].children[0].children[0]
+            resolve();
+        })
+    })
 }
 
 /**
@@ -276,7 +284,7 @@ const loadAudioFiles = (listener) => {
         const hoopHitSound = new THREE.PositionalAudio( listener );
         audioLoader.load(`sfx/hoophit${i}.mp3`, ( buffer ) => {
             hoopHitSound.setBuffer(buffer);
-            hoopHitSound.setRefDistance( 2 );
+            hoopHitSound.setRefDistance( 1 );
             hoopHitSounds.push(hoopHitSound);
             objects.hoop.mesh.add(hoopHitSound)
         });
@@ -303,15 +311,14 @@ let isPlayingHoopHitSound = false;
 const playHoopHitSound = (collision) => {
     if (!isPlayingHoopHitSound) {
         const impactStrength = Math.min(collision.contact.getImpactVelocityAlongNormal(), 10);
-        if(impactStrength > 1) {
+        if(impactStrength > 1.5) {
             isPlayingHoopHitSound = true;
             const hitSound = hoopHitSounds[Math.floor(Math.random() * hoopHitSounds.length)];
             hitSound.setVolume(impactStrength / 10);
             hitSound.play();
             setTimeout(() => {
                 isPlayingHoopHitSound = false;
-            },  hitSound.buffer.duration)
-            
+            },  250)
         }
     }
 }
@@ -423,6 +430,7 @@ const onMouseMove = (event) => {
     mouse.y = - (event.clientY / sizes.height) * 2 + 1;
     if (gplane && mouseConstraint) {
         const pos = projectOntoPlane();
+        if (pos.x === undefined || pos.y === undefined || pos.z === undefined) return;
         moveJointToPoint(pos.x, pos.y, pos.z);
     }
 }
@@ -434,9 +442,9 @@ const onMouseDown = () => {
         isGrabbing = true;
 
         const pos = currentIntersect.point;
+        if (pos.x === undefined || pos.y === undefined || pos.z === undefined) return;
         pos.x = 0;
         ballBody.angularVelocity = new CANNON.Vec3(0, 0, 0)
-        console.log
         setScreenPerpCenter(pos);
         addMouseConstraint(pos.x, pos.y, pos.z, ballBody);
     }
