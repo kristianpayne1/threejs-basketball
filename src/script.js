@@ -188,7 +188,7 @@ const createHoop = () => {
     const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.35, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
         metalness: 0.7,
         roughness: 0.3,
-        color: '#ff0000'
+        color: new THREE.Color('#DA1426').convertSRGBToLinear()
     }));
     hoop.castShadow = true;
     hoop.rotation.x += Math.PI * 0.5
@@ -201,14 +201,23 @@ const createHoop = () => {
     hoopBody.addShape(hoopShape, new CANNON.Vec3(0, 0, 0), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5));
 
     // Backboard
-    const boardPosition = [-0.36, 0.23, 0];
+    const boardPosition = [-0.40, 0.36, 0];
+    const mat1 = new THREE.MeshBasicMaterial({color: 0xffffff});
+    const mat2 = new THREE.MeshBasicMaterial({color: 0xffffff});
+    const mat3 = new THREE.MeshBasicMaterial({color: 0xffffff});
+    const mat4 = new THREE.MeshBasicMaterial({color: 0xffffff});
+    const mat5 = new THREE.MeshBasicMaterial({color: 0xffffff, map: new THREE.TextureLoader().load('backboard/backboard.png'), metalness: 0.3, roughness: 0.3});
+    const mat6 = new THREE.MeshBasicMaterial({color: 0xffffff});
     const board = new THREE.Mesh(
         new THREE.BoxGeometry(1.825, 1.219, 0.03),
-        new THREE.MeshStandardMaterial({
-            color: '#ffffff',
-            metalness: 0.5,
-            roughness: 0.3,
-        })
+        [
+            mat1,
+            mat2,
+            mat3,
+            mat4,
+            mat5,
+            mat6,
+        ]
     )
     board.position.set(position[0] + boardPosition[0], position[1] + boardPosition[1], position[2] + boardPosition[2]);
     board.receiveShadow = true
@@ -291,32 +300,30 @@ const loadAudioFiles = (listener) => {
     }
 }
 
-let isPlayingBounceSound = false;
+let isPlayingBounceSound;
 const playBounceSound = (collision) => {
     if (!isPlayingBounceSound) {
         const impactStrength = Math.min(collision.contact.getImpactVelocityAlongNormal(), 10);
         if(impactStrength > 0.5) {
-            isPlayingBounceSound = true;
             const hitSound = bounceSounds[Math.floor(Math.random() * bounceSounds.length)];
             hitSound.setVolume(impactStrength / 10);
             hitSound.play();
-            setTimeout(() => {
+            isPlayingBounceSound = setTimeout(() => {
                 isPlayingBounceSound = false;
             }, hitSound.buffer.duration)
         }
     }
 }
 
-let isPlayingHoopHitSound = false;
+let isPlayingHoopHitSound;
 const playHoopHitSound = (collision) => {
     if (!isPlayingHoopHitSound) {
         const impactStrength = Math.min(collision.contact.getImpactVelocityAlongNormal(), 10);
         if(impactStrength > 1.5) {
-            isPlayingHoopHitSound = true;
             const hitSound = hoopHitSounds[Math.floor(Math.random() * hoopHitSounds.length)];
             hitSound.setVolume(impactStrength / 10);
             hitSound.play();
-            setTimeout(() => {
+            isPlayingHoopHitSound = setTimeout(() => {
                 isPlayingHoopHitSound = false;
             },  250)
         }
