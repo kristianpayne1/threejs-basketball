@@ -1,0 +1,11 @@
+Model Information:
+* title:	Standart Basketball-Ball
+* source:	https://sketchfab.com/3d-models/standart-basketball-ball-e3b4e0d9e3864fb584adbacb7a8adeb2
+* author:	Umut Calim (https://sketchfab.com/UmutCalim)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Standart Basketball-Ball" (https://sketchfab.com/3d-models/standart-basketball-ball-e3b4e0d9e3864fb584adbacb7a8adeb2) by Umut Calim (https://sketchfab.com/UmutCalim) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
