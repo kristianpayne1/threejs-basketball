@@ -10,7 +10,7 @@ let parameters, scene, controls, renderer, camera, clock;
 let previousTime, world, directionalLight, ambientLight, objectsToUpdate = [];
 let cannonDebugger, objects = {}, raycaster, mouse, isGrabbing, currentIntersect
 let gplane, jointBody, mouseConstraint, constrainedBody, sizes;
-let bounceSounds, hoopHitSounds, ballModel;
+let bounceSounds, hoopHitSounds, ballModel, textureLoader;
 
 /**
  * Initialise scene
@@ -57,6 +57,11 @@ const init = () => {
      */
     const listener = new THREE.AudioListener();
     camera.add( listener );
+
+    /**
+     * Textures
+     */
+    textureLoader = new THREE.TextureLoader();
 
     /**
      * Controls
@@ -118,6 +123,7 @@ const createObjects = () => {
     objects.floor = createFloor();
     objects.ball = createBall();
     objects.hoop = createHoop();
+    objects.walls = createWalls();
 
     // Joint body
     const shape = new CANNON.Particle();
@@ -131,17 +137,23 @@ const createObjects = () => {
 }
 
 const createFloor = () => {
-    // Floor
     const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(20, 10),
-        new THREE.MeshStandardMaterial({
-            color: '#777777',
-            metalness: 0.3,
-            roughness: 0.4,
-        })
-    )
+        new THREE.PlaneGeometry(20, 10, 200, 100),
+        new THREE.MeshStandardMaterial()
+    );
     floor.receiveShadow = true
-    floor.rotation.x = - Math.PI * 0.5
+    floor.rotation.x = - Math.PI * 0.5;
+
+    // Textures
+    const maps = [];
+    const colorMap = textureLoader.load('floor/WoodFlooringMahoganyAfricanSanded001_COL_2K.jpg');
+    colorMap.repeat.x = 6;
+    colorMap.repeat.y = 6;
+    colorMap.wrapS = THREE.RepeatWrapping;
+    colorMap.wrapT = THREE.RepeatWrapping;
+    colorMap.rotation = Math.PI * 0.5;
+    floor.material.map = colorMap;
+
     scene.add(floor)
 
     // Floor physics
@@ -206,7 +218,7 @@ const createHoop = () => {
     const mat2 = new THREE.MeshBasicMaterial({color: 0xffffff});
     const mat3 = new THREE.MeshBasicMaterial({color: 0xffffff});
     const mat4 = new THREE.MeshBasicMaterial({color: 0xffffff});
-    const mat5 = new THREE.MeshBasicMaterial({color: 0xffffff, map: new THREE.TextureLoader().load('backboard/backboard.png'), metalness: 0.3, roughness: 0.3});
+    const mat5 = new THREE.MeshStandardMaterial({color: 0xffffff, map: textureLoader.load('backboard/backboard.png'), metalness: 0.3, roughness: 0.3});
     const mat6 = new THREE.MeshBasicMaterial({color: 0xffffff});
     const board = new THREE.Mesh(
         new THREE.BoxGeometry(1.825, 1.219, 0.03),
@@ -234,6 +246,60 @@ const createHoop = () => {
 
     // objectsToUpdate.push({ mesh: hoop, body: hoopBody })
     return { mesh, body: hoopBody };
+}
+
+const createWalls = () => {
+    const walls = new THREE.Group();
+    const wallsPosRot = [
+        { position: new THREE.Vector3(0, 4, 5), rotation: new THREE.Vector3(0, Math.PI, 0) },
+        { position: new THREE.Vector3(-10, 4, 0), rotation: new THREE.Vector3(0, Math.PI * 0.5, 0) },
+        {position: new THREE.Vector3(0, 4, -5), rotation: new THREE.Vector3(0, 0, 0) }, 
+    ];
+    
+    const geometry = new THREE.PlaneBufferGeometry(20, 10, 200, 100);
+    geometry.setAttribute('uv2', new THREE.BufferAttribute(geometry.attributes.uv.array, 2))
+    const material = new THREE.MeshStandardMaterial();
+
+    // Textures
+    const maps = [];
+    const colorMap = textureLoader.load('wall/BricksPaintedWhite001_COL_2K.jpg');
+    maps.push(colorMap);
+    material.map = colorMap;
+
+    const aoMap = textureLoader.load('wall/BricksPaintedWhite001_AO_2K.jpg');
+    material.aoMap = aoMap;
+    material.aoMapIntensity = 1;
+    maps.push(aoMap);
+
+    const normalMap = textureLoader.load('wall/BricksPaintedWhite001_NRM_2K.jpg');
+    material.normalMap = normalMap;
+    material.normalScale.set(0.75, 0.75)
+    maps.push(normalMap);
+   
+    maps.forEach(map => {
+        map.repeat.x = 5;
+        map.repeat.y = 3;
+        map.wrapS = THREE.RepeatWrapping;
+        map.wrapT = THREE.RepeatWrapping;
+    })
+    
+    for(let i = 0; i < 3; i++) {
+        const wall = new THREE.Mesh(
+            geometry,
+            material
+        );
+        const { position, rotation } = wallsPosRot[i]
+        wall.position.copy(position);
+        wall.rotateY(rotation.y)
+        wall.receiveShadow = true;
+        wall.castShadow = true;
+
+        walls.add(wall);
+    }
+
+    scene.add(walls);
+
+    return { mesh: walls, body: null }
 }
 
 /**
@@ -356,12 +422,12 @@ const createLights = () => {
 const createGUI = () => {
     parameters = {
         ambientLightColor: 0xffffff,
-        ambientLightIntensity: 2,
+        ambientLightIntensity: 1.5,
         directionalLightColor: 0xffffff,
         directionalLightIntensity: 4,
-        directionalLightX: 5,
-        directionalLightY: 5,
-        directionalLightZ: 5,
+        directionalLightX: 4,
+        directionalLightY: 4.5,
+        directionalLightZ: 0.5,
         directionalLightRotX: 0,
         directionalLightRotY: 0,
         directionalLightRotZ: 0,
