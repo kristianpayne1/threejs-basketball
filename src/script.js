@@ -112,15 +112,21 @@ const init = () => {
 
 const loadAssets = (callback) => {
     const manager = new THREE.LoadingManager();
+    const loadingOverlay = document.querySelector('div.loading-overlay')
+    const loadingBar = document.querySelector('div.progress-bar');
     manager.onStart = ( url, itemsLoaded, itemsTotal ) => {
         console.log( 'Started loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.' );
     };
     manager.onLoad = () => {
         console.log( 'Loading complete!');
-        callback();
+        setTimeout(() => {
+            loadingOverlay.classList.add('hidden');
+            callback();
+        }, 600)
     };
     manager.onProgress = (url, itemsLoaded, itemsTotal) => {
-        console.log( 'Loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.' );
+        console.log( `Loading file: ${url}.\nLoaded ${itemsLoaded} of ${itemsTotal} files. ${Math.floor((itemsLoaded / itemsTotal) * 100)}%` );
+        loadingBar.style.width = `${Math.floor((itemsLoaded / itemsTotal) * 100)}%`
     };
     manager.onError = (url) => {
         console.log( 'There was an error loading ' + url );

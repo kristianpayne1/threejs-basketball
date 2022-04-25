@@ -10,10 +10,29 @@ body
     overflow: hidden;
 }
 
-.webgl
+canvas.webgl
 {
     position: fixed;
     top: 0;
     left: 0;
     outline: none;
+}
+
+div.loading-overlay {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    flex-wrap: wrap;
+    height: 100vh;
+    width: 100vw;
+    z-index: 2;
+}
+div.loading-overlay.hidden {
+    display: none;
+}
+div.loading-overlay div.progress {
+    max-width: 30rem;
+    width: 100%;
 }
