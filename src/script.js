@@ -10,7 +10,7 @@ let parameters, scene, controls, renderer, camera, clock;
 let previousTime, world, directionalLight, ambientLight, objectsToUpdate = [];
 let cannonDebugger, objects = {}, raycaster, mouse, isGrabbing, currentIntersect
 let gplane, jointBody, mouseConstraint, constrainedBody, sizes;
-let bounceSounds, hoopHitSounds, ballModel, textureLoader;
+let bounceSounds, hoopHitSounds, ballModel, textures;
 
 /**
  * Initialise scene
@@ -53,15 +53,8 @@ const init = () => {
     scene.add(camera)
 
     /**
-     * Audio
-     */
-    const listener = new THREE.AudioListener();
-    camera.add( listener );
-
-    /**
      * Textures
      */
-    textureLoader = new THREE.TextureLoader();
 
     /**
      * Controls
@@ -105,18 +98,37 @@ const init = () => {
         },
       })
 
-    // Create stuff
-    createGUI();
-    createLights();
-    loadModels()
-        .then(() => {
-            createObjects();
-            loadAudioFiles( listener );
-            createControls(sizes);
-    
-            // Let's get things rolling...
-            tick();
-        });
+    loadAssets(() => {
+        // Create stuff
+        createGUI();
+        createLights();
+        createObjects();
+        createControls(sizes);
+
+        // Let's get things rolling...
+        tick();
+    });
+}
+
+const loadAssets = (callback) => {
+    const manager = new THREE.LoadingManager();
+    manager.onStart = ( url, itemsLoaded, itemsTotal ) => {
+        console.log( 'Started loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.' );
+    };
+    manager.onLoad = () => {
+        console.log( 'Loading complete!');
+        callback();
+    };
+    manager.onProgress = (url, itemsLoaded, itemsTotal) => {
+        console.log( 'Loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.' );
+    };
+    manager.onError = (url) => {
+        console.log( 'There was an error loading ' + url );
+    };
+
+    loadModels(manager);
+    loadAudioFiles(manager);
+    loadTextures(manager);
 }
 
 const createObjects = () => {
@@ -145,8 +157,7 @@ const createFloor = () => {
     floor.rotation.x = - Math.PI * 0.5;
 
     // Textures
-    const maps = [];
-    const colorMap = textureLoader.load('floor/WoodFlooringMahoganyAfricanSanded001_COL_2K.jpg');
+    const { colorMap } = textures.floor;
     colorMap.repeat.x = 6;
     colorMap.repeat.y = 6;
     colorMap.wrapS = THREE.RepeatWrapping;
@@ -173,6 +184,8 @@ const createBall = () => {
     mesh.scale.set(parameters.radius + 0.05, parameters.radius + 0.05, parameters.radius + 0.05);
     scene.add(mesh)
 
+    bounceSounds.forEach(sound =>  mesh.add(sound))
+
     const sphereShape = new CANNON.Sphere(parameters.radius)
     const sphereBody = new CANNON.Body({
         mass: 1,
@@ -189,6 +202,7 @@ const createBall = () => {
     sphereBody.addEventListener('collide', playBounceSound)
     world.addBody(sphereBody)
 
+
     objectsToUpdate.push({ mesh, body: sphereBody });
     return { mesh, body: sphereBody };
 }
@@ -196,11 +210,13 @@ const createBall = () => {
 const createHoop = () => {
     const position = [parameters.hoopPositionX, parameters.hoopPositionY, parameters.hoopPositionZ];
     const mesh = new THREE.Group();
+
+    hoopHitSounds.forEach(sound =>  mesh.add(sound))
     // Hoop
     const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.35, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
         metalness: 0.7,
         roughness: 0.3,
-        color: new THREE.Color('#DA1426').convertSRGBToLinear()
+        color: new THREE.Color('#db3746').convertSRGBToLinear()
     }));
     hoop.castShadow = true;
     hoop.rotation.x += Math.PI * 0.5
@@ -213,12 +229,13 @@ const createHoop = () => {
     hoopBody.addShape(hoopShape, new CANNON.Vec3(0, 0, 0), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5));
 
     // Backboard
+    const { colorMap } = textures.board;
     const boardPosition = [-0.40, 0.36, 0];
     const mat1 = new THREE.MeshBasicMaterial({color: 0xffffff});
     const mat2 = new THREE.MeshBasicMaterial({color: 0xffffff});
     const mat3 = new THREE.MeshBasicMaterial({color: 0xffffff});
     const mat4 = new THREE.MeshBasicMaterial({color: 0xffffff});
-    const mat5 = new THREE.MeshStandardMaterial({color: 0xffffff, map: textureLoader.load('backboard/backboard.png'), metalness: 0.3, roughness: 0.3});
+    const mat5 = new THREE.MeshStandardMaterial({color: 0xffffff, map: colorMap, metalness: 0.3, roughness: 0.1});
     const mat6 = new THREE.MeshBasicMaterial({color: 0xffffff});
     const board = new THREE.Mesh(
         new THREE.BoxGeometry(1.825, 1.219, 0.03),
@@ -262,16 +279,14 @@ const createWalls = () => {
 
     // Textures
     const maps = [];
-    const colorMap = textureLoader.load('wall/BricksPaintedWhite001_COL_2K.jpg');
-    maps.push(colorMap);
+    const { colorMap, aoMap, normalMap } = textures.wall;
     material.map = colorMap;
+    maps.push(colorMap);
 
-    const aoMap = textureLoader.load('wall/BricksPaintedWhite001_AO_2K.jpg');
     material.aoMap = aoMap;
     material.aoMapIntensity = 1;
     maps.push(aoMap);
 
-    const normalMap = textureLoader.load('wall/BricksPaintedWhite001_NRM_2K.jpg');
     material.normalMap = normalMap;
     material.normalScale.set(0.75, 0.75)
     maps.push(normalMap);
@@ -327,21 +342,49 @@ const initialisePhysics = () => {
 /**
  * Load models
  */
-const loadModels = () => {
-    return new Promise((resolve, reject) => {
-        const gltfLoader = new GLTFLoader();
-        gltfLoader.load('basketball/basketball.gltf', (gltf) => {
-            ballModel = gltf.scene.children[0].children[0].children[0].children[0]
-            resolve();
-        })
+const loadModels = (manager) => {
+    const gltfLoader = new GLTFLoader(manager);
+    gltfLoader.load('basketball/basketball.gltf', (gltf) => {
+        ballModel = gltf.scene.children[0].children[0].children[0].children[0]
     })
+}
+
+/**
+ * Load Textures
+ */
+const loadTextures = (manager) => {
+    const textureLoader = new THREE.TextureLoader(manager);
+    // Floor
+    const loadFloorTextures = () => {
+        const colorMap = textureLoader.load('floor/WoodFlooringMahoganyAfricanSanded001_COL_2K.jpg');
+        textures = { ...textures, floor: { colorMap } };
+    }
+    // Wall
+    const loadWallTextures = () => {
+        const colorMap = textureLoader.load('wall/BricksPaintedWhite001_COL_2K.jpg');
+        const aoMap = textureLoader.load('wall/BricksPaintedWhite001_AO_2K.jpg');
+        const normalMap = textureLoader.load('wall/BricksPaintedWhite001_NRM_2K.jpg');
+        textures = { ...textures, wall: { colorMap, aoMap, normalMap } };
+    }
+    // Board
+    const loadBoardTextures = () => {
+        const colorMap = textureLoader.load('backboard/backboard.png');
+        textures = { ...textures, board: { colorMap } };
+    }
+    // Load
+    loadFloorTextures();
+    loadWallTextures();
+    loadBoardTextures();
 }
 
 /**
  *  Audio
  */
-const loadAudioFiles = (listener) => {
-    const audioLoader = new THREE.AudioLoader();
+const loadAudioFiles = (manager) => {
+    const listener = new THREE.AudioListener();
+    camera.add( listener );
+
+    const audioLoader = new THREE.AudioLoader(manager);
     bounceSounds = [];
     hoopHitSounds = [];
     // Load bounce sounds
@@ -351,7 +394,6 @@ const loadAudioFiles = (listener) => {
             bounceSound.setBuffer(buffer);
             bounceSound.setRefDistance( 2 );
             bounceSounds.push(bounceSound);
-            objects.ball.mesh.add(bounceSound)
         });
     }
     // Load hoop hit sounds
@@ -361,7 +403,6 @@ const loadAudioFiles = (listener) => {
             hoopHitSound.setBuffer(buffer);
             hoopHitSound.setRefDistance( 1 );
             hoopHitSounds.push(hoopHitSound);
-            objects.hoop.mesh.add(hoopHitSound)
         });
     }
 }
