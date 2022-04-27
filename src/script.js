@@ -153,7 +153,7 @@ const createObjects = () => {
 const createFloor = () => {
     const floor = new THREE.Mesh(
         new THREE.PlaneGeometry(20, 10, 200, 100),
-        new THREE.MeshStandardMaterial()
+        new THREE.MeshStandardMaterial({ color: '#B89979' })
     );
     floor.receiveShadow = true
     floor.rotation.x = - Math.PI * 0.5;
