@@ -32,9 +32,22 @@ div.loading-overlay {
 div.loading-overlay.hidden {
     display: none;
 }
-div.loading-overlay div.progress {
+div.loading-overlay div.overlay-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    max-width: 30rem;
+    max-height: 20rem;
+    width: 100%;
+    height: 100%;
+}
+div.loading-overlay div.overlay-content div.progress {
     max-width: 30rem;
     width: 100%;
+    border: 2px solid black;
+    box-shadow: 2px 2px;
 }
 
 /*# sourceMappingURL=main.css.map*/
