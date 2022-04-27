@@ -114,9 +114,6 @@ const loadAssets = (callback) => {
     const manager = new THREE.LoadingManager();
     const loadingOverlay = document.querySelector('div.loading-overlay')
     const loadingBar = document.querySelector('div.progress-bar');
-    manager.onStart = ( url, itemsLoaded, itemsTotal ) => {
-        console.log( 'Started loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.' );
-    };
     manager.onLoad = () => {
         console.log( 'Loading complete!');
         setTimeout(() => {
@@ -125,7 +122,6 @@ const loadAssets = (callback) => {
         }, 600)
     };
     manager.onProgress = (url, itemsLoaded, itemsTotal) => {
-        console.log( `Loading file: ${url}.\nLoaded ${itemsLoaded} of ${itemsTotal} files. ${Math.floor((itemsLoaded / itemsTotal) * 100)}%` );
         loadingBar.style.width = `${Math.floor((itemsLoaded / itemsTotal) * 100)}%`
     };
     manager.onError = (url) => {
