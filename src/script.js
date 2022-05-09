@@ -151,12 +151,16 @@ const createObjects = () => {
 }
 
 const createFloor = () => {
-    const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(20, 10, 200, 100),
+    const floor = new THREE.Group();
+    const floorGeometry = new THREE.PlaneGeometry(20, 12, 200, 100);
+
+    // Wooden floor
+    const woodenFloorMesh = new THREE.Mesh(
+        floorGeometry,
         new THREE.MeshStandardMaterial({ color: '#B89979' })
     );
-    floor.receiveShadow = true
-    floor.rotation.x = - Math.PI * 0.5;
+    woodenFloorMesh.receiveShadow = true
+    woodenFloorMesh.rotation.x = - Math.PI * 0.5;
 
     // Textures
     const { colorMap } = textures.floor;
@@ -165,9 +169,33 @@ const createFloor = () => {
     colorMap.wrapS = THREE.RepeatWrapping;
     colorMap.wrapT = THREE.RepeatWrapping;
     colorMap.rotation = Math.PI * 0.5;
-    floor.material.map = colorMap;
+    woodenFloorMesh.material.map = colorMap;
 
-    scene.add(floor)
+    floor.add(woodenFloorMesh);
+
+    // Markings
+    const markingsMesh = new THREE.Mesh(
+        floorGeometry,
+        new THREE.MeshStandardMaterial({
+            transparent: true,
+        })
+    );
+    markingsMesh.receiveShadow = true
+    markingsMesh.rotation.x = - Math.PI * 0.5;
+    markingsMesh.position.y = 0.01;
+
+    // Textures
+    const { colorMap: markingsColorMap } = textures.markings;
+    markingsColorMap.transparent= true;
+    markingsColorMap.repeat.x = 1;
+    markingsColorMap.repeat.y = 1;
+    markingsColorMap.wrapS = THREE.RepeatWrapping;
+    markingsColorMap.wrapT = THREE.RepeatWrapping;
+    markingsMesh.material.map = markingsColorMap;
+
+    floor.add(markingsMesh);
+
+    scene.add(floor);
 
     // Floor physics
     const floorShape = new CANNON.Plane()
@@ -270,9 +298,9 @@ const createHoop = () => {
 const createWalls = () => {
     const walls = new THREE.Group();
     const wallsPosRot = [
-        { position: new THREE.Vector3(0, 4, 5), rotation: new THREE.Vector3(0, Math.PI, 0) },
+        { position: new THREE.Vector3(0, 4, 6), rotation: new THREE.Vector3(0, Math.PI, 0) },
         { position: new THREE.Vector3(-10, 4, 0), rotation: new THREE.Vector3(0, Math.PI * 0.5, 0) },
-        {position: new THREE.Vector3(0, 4, -5), rotation: new THREE.Vector3(0, 0, 0) }, 
+        { position: new THREE.Vector3(0, 4, -6), rotation: new THREE.Vector3(0, 0, 0) }, 
     ];
     
     const geometry = new THREE.PlaneBufferGeometry(20, 10, 200, 100);
@@ -361,6 +389,11 @@ const loadTextures = (manager) => {
         const colorMap = textureLoader.load('floor/WoodFlooringMahoganyAfricanSanded001_COL_2K.jpg');
         textures = { ...textures, floor: { colorMap } };
     }
+    // Markings
+    const loadMarkingsTexture = () => {
+        const colorMap = textureLoader.load('floor/basketball-markings.png');
+        textures = { ...textures, markings: { colorMap } };
+    }
     // Wall
     const loadWallTextures = () => {
         const colorMap = textureLoader.load('wall/BricksPaintedWhite001_COL_2K.jpg');
@@ -375,6 +408,7 @@ const loadTextures = (manager) => {
     }
     // Load
     loadFloorTextures();
+    loadMarkingsTexture();
     loadWallTextures();
     loadBoardTextures();
 }
