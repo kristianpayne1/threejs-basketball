@@ -1,16 +1,21 @@
 import './style.css'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import * as dat from 'lil-gui'
-import * as CANNON from 'cannon-es'
-import CannonDebugger from 'cannon-es-debugger'
+import { 
+    addBounceSoundsToMesh, 
+    addHitHoopSoundsToMesh, 
+    getModels, 
+    getTextures, 
+    loadAssets,  
+} from './asset-manager';
 
 let parameters, scene, controls, renderer, camera, clock;
-let previousTime, world, directionalLight, ambientLight, objectsToUpdate = [];
-let cannonDebugger, objects = {}, raycaster, mouse, isGrabbing, currentIntersect
-let gplane, jointBody, mouseConstraint, constrainedBody, sizes;
-let bounceSounds, hoopHitSounds, ballModel, textures;
+let directionalLight, ambientLight, objectsToUpdate = [];
+let objects = {}, raycaster, mouse, isGrabbing, currentIntersect
+let gplane, sizes, sendTime, worker
+
+const timeStep = 1 / 60;
 
 /**
  * Initialise scene
@@ -18,7 +23,6 @@ let bounceSounds, hoopHitSounds, ballModel, textures;
 const init = () => {
     scene = new THREE.Scene();
     clock = new THREE.Clock()
-    previousTime = 0
 
     const canvas = document.querySelector('canvas.webgl')
 
@@ -53,10 +57,6 @@ const init = () => {
     scene.add(camera)
 
     /**
-     * Textures
-     */
-
-    /**
      * Controls
      */
     controls = new OrbitControls(camera, canvas)
@@ -79,26 +79,26 @@ const init = () => {
     renderer.outputEncoding = THREE.sRGBEncoding;
 
     /**
-     * Initialise physics
-     */
-    initialisePhysics();
-
-    /**
      * Debugger
      */
-     cannonDebugger = new CannonDebugger(scene, world, {
-        onInit(body, mesh) {
-            mesh.visible = false;   
-            // Toggle visibiliy on "d" press
-            document.addEventListener('keydown', (event) => {
-            if (event.key === 'd') {
-                mesh.visible = !mesh.visible
-            }
-            })
-        },
-      })
+    // cannonDebugger = new CannonDebugger(scene, world, {
+    //     onInit(body, mesh) {
+    //         mesh.visible = false;   
+    //         // Toggle visibiliy on "d" press
+    //         document.addEventListener('keydown', (event) => {
+    //         if (event.key === 'd') {
+    //             mesh.visible = !mesh.visible
+    //         }
+    //         })
+    //     },
+    // });
 
-    loadAssets(() => {
+    /**
+     * Worker
+     */
+    initialiseWebWorker();
+
+    loadAssets(camera, () => {
         // Create stuff
         createGUI();
         createLights();
@@ -107,30 +107,8 @@ const init = () => {
 
         // Let's get things rolling...
         tick();
+        updateWorker();
     });
-}
-
-const loadAssets = (callback) => {
-    const manager = new THREE.LoadingManager();
-    const loadingOverlay = document.querySelector('div.loading-overlay')
-    const loadingBar = document.querySelector('div.progress-bar');
-    manager.onLoad = () => {
-        console.log( 'Loading complete!');
-        setTimeout(() => {
-            loadingOverlay.classList.add('hidden');
-            callback();
-        }, 600)
-    };
-    manager.onProgress = (url, itemsLoaded, itemsTotal) => {
-        loadingBar.style.width = `${Math.floor((itemsLoaded / itemsTotal) * 100)}%`
-    };
-    manager.onError = (url) => {
-        console.log( 'There was an error loading ' + url );
-    };
-
-    loadModels(manager);
-    loadAudioFiles(manager);
-    loadTextures(manager);
 }
 
 const createObjects = () => {
@@ -138,16 +116,6 @@ const createObjects = () => {
     objects.ball = createBall();
     objects.hoop = createHoop();
     objects.walls = createWalls();
-
-    // Joint body
-    const shape = new CANNON.Particle();
-    jointBody = new CANNON.Body({
-        mass: 0
-    });
-    jointBody.addShape(shape);
-    jointBody.collisionFilterGroup = 0;
-    jointBody.collisionFilterMask = 0;
-    world.addBody(jointBody)
 }
 
 const createFloor = () => {
@@ -163,7 +131,8 @@ const createFloor = () => {
     woodenFloorMesh.rotation.x = - Math.PI * 0.5;
 
     // Textures
-    const { colorMap } = textures.floor;
+    const { floor: floorTextures, markings: markingsTextures } = getTextures();
+    const { colorMap } =floorTextures;
     colorMap.repeat.x = 6;
     colorMap.repeat.y = 6;
     colorMap.wrapS = THREE.RepeatWrapping;
@@ -185,7 +154,7 @@ const createFloor = () => {
     markingsMesh.position.y = 0.01;
 
     // Textures
-    const { colorMap: markingsColorMap } = textures.markings;
+    const { colorMap: markingsColorMap } = markingsTextures;
     markingsColorMap.transparent= true;
     markingsColorMap.repeat.x = 1;
     markingsColorMap.repeat.y = 1;
@@ -197,51 +166,45 @@ const createFloor = () => {
 
     scene.add(floor);
 
-    // Floor physics
-    const floorShape = new CANNON.Plane()
-    const floorBody = new CANNON.Body()
-    floorBody.mass = 0
-    floorBody.addShape(floorShape)
-    floorBody.quaternion.setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5) 
-    world.addBody(floorBody)
+    worker.postMessage({
+        type: "CREATE_FLOOR",
+        payload: { }
+    });
 
-    return { mesh: floor, body: floorBody };
+    return floor;
 }
 
 const createBall = () => {
+    const position = [0, 1.25, 0];
+    const radius = parameters.radius;
+
+    const { ball: ballModel } = getModels();
     const mesh = ballModel;
     mesh.castShadow = true
-    mesh.scale.set(parameters.radius + 0.05, parameters.radius + 0.05, parameters.radius + 0.05);
+    mesh.scale.set(radius + 0.05, radius + 0.05, radius + 0.05);
+    mesh.userData.bodyID = objectsToUpdate.length;
     scene.add(mesh)
 
-    bounceSounds.forEach(sound =>  mesh.add(sound))
+    addBounceSoundsToMesh(mesh);
 
-    const sphereShape = new CANNON.Sphere(parameters.radius)
-    const sphereBody = new CANNON.Body({
-        mass: 1,
-        position: new CANNON.Vec3(0, 1.25, 0),
-        shape: sphereShape,
+    worker.postMessage({
+        type: "CREATE_BALL",
+        payload: {
+            position,
+            radius
+        }
     });
-    var quatX = new CANNON.Quaternion();
-    var quatY = new CANNON.Quaternion();
-    quatX.setFromAxisAngle(new CANNON.Vec3(1,0,0), Math.PI * 0.5);
-    quatY.setFromAxisAngle(new CANNON.Vec3(0,0,1), Math.PI * 0.5);
-    var quaternion = quatY.mult(quatX);
-    sphereBody.quaternion = quaternion
-    sphereBody.sleep();
-    sphereBody.addEventListener('collide', playBounceSound)
-    world.addBody(sphereBody)
 
-
-    objectsToUpdate.push({ mesh, body: sphereBody });
-    return { mesh, body: sphereBody };
+    objectsToUpdate.push(mesh);
+    return mesh;
 }
 
 const createHoop = () => {
     const position = [parameters.hoopPositionX, parameters.hoopPositionY, parameters.hoopPositionZ];
     const mesh = new THREE.Group();
 
-    hoopHitSounds.forEach(sound =>  mesh.add(sound))
+    addHitHoopSoundsToMesh(mesh)
+
     // Hoop
     const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.35, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
         metalness: 0.7,
@@ -253,13 +216,9 @@ const createHoop = () => {
     hoop.position.set(...position);
     mesh.add( hoop );
 
-    const hoopShape = CANNON.Trimesh.createTorus(0.35, 0.025, 16, 100);
-    const hoopBody = new CANNON.Body({ mass: 0 });
-    hoopBody.position.set(...position);
-    hoopBody.addShape(hoopShape, new CANNON.Vec3(0, 0, 0), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5));
-
     // Backboard
-    const { colorMap } = textures.board;
+    const { board: boardTextures } = getTextures();
+    const { colorMap } = boardTextures;
     const boardPosition = [-0.40, 0.36, 0];
     const mat1 = new THREE.MeshBasicMaterial({color: 0xffffff});
     const mat2 = new THREE.MeshBasicMaterial({color: 0xffffff});
@@ -284,15 +243,18 @@ const createHoop = () => {
     board.rotation.y = Math.PI * 0.5
     mesh.add(board)
 
-    const boardShape = new CANNON.Box(new CANNON.Vec3(1.825 * 0.5, 1.219 * 0.5, 0.03 * 0.5 ))
-    hoopBody.addShape(boardShape, new CANNON.Vec3(...boardPosition), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI * 0.5))
+    worker.postMessage({
+        type: "CREATE_HOOP",
+        payload: {
+            position,
+            boardPosition,
+        }
+    });
 
-    hoopBody.addEventListener('collide', playHoopHitSound)
-    world.addBody(hoopBody);
     scene.add(mesh)
 
     // objectsToUpdate.push({ mesh: hoop, body: hoopBody })
-    return { mesh, body: hoopBody };
+    return mesh;
 }
 
 const createWalls = () => {
@@ -308,8 +270,9 @@ const createWalls = () => {
     const material = new THREE.MeshStandardMaterial();
 
     // Textures
+    const { wall: wallTextures } = getTextures();
     const maps = [];
-    const { colorMap, aoMap, normalMap } = textures.wall;
+    const { colorMap, aoMap, normalMap } = wallTextures;
     material.map = colorMap;
     maps.push(colorMap);
 
@@ -344,133 +307,46 @@ const createWalls = () => {
 
     scene.add(walls);
 
-    return { mesh: walls, body: null }
+    return walls;
 }
 
 /**
- * Physics
+ * Physics web worker
  */
-const initialisePhysics = () => {
-    world = new CANNON.World()
-    world.gravity.set(0, - 9.82, 0);
-    world.broadphase = new CANNON.SAPBroadphase(world)
-    world.allowSleep = true
-  
-    // Default material
-    const defaultMaterial = new CANNON.Material('default')
-    const defaultContactMaterial = new CANNON.ContactMaterial(
-        defaultMaterial,
-        defaultMaterial,
-        {
-            friction: 0.5,
-            restitution: 0.7
+const initialiseWebWorker = () => {
+    worker = new Worker(new URL('./worker.js', import.meta.url));
+
+    worker.addEventListener('message', event => {
+        const { positions, quaternions } = event.data;
+
+        // check if we have correct data
+        if ((positions.length / 3) !== objectsToUpdate.length) return console.error('Incorrect positions data');
+        if ((quaternions.length / 4) !== objectsToUpdate.length) return console.error('Incorrect quaternions data');
+
+        // Update the three.js meshes
+        for (let i = 0; i < objectsToUpdate.length; i++) {
+            objectsToUpdate[i].position.set(positions[i * 3 + 0], positions[i * 3 + 1], positions[i * 3 + 2]);
+            objectsToUpdate[i].quaternion.set(
+              quaternions[i * 4 + 0],
+              quaternions[i * 4 + 1],
+              quaternions[i * 4 + 2],
+              quaternions[i * 4 + 3]
+            );
         }
-    )
-    world.defaultContactMaterial = defaultContactMaterial
-}
 
-/**
- * Load models
- */
-const loadModels = (manager) => {
-    const gltfLoader = new GLTFLoader(manager);
-    gltfLoader.load('basketball/basketball.gltf', (gltf) => {
-        ballModel = gltf.scene.children[0].children[0].children[0].children[0]
+        // Delay the next step by the amount of timeStep remaining,
+        // otherwise run it immediatly
+        const delay = timeStep * 1000 - (performance.now() - sendTime);
+        setTimeout(updateWorker, Math.max(delay, 0));
     })
 }
 
-/**
- * Load Textures
- */
-const loadTextures = (manager) => {
-    const textureLoader = new THREE.TextureLoader(manager);
-    // Floor
-    const loadFloorTextures = () => {
-        const colorMap = textureLoader.load('floor/WoodFlooringMahoganyAfricanSanded001_COL_2K.jpg');
-        textures = { ...textures, floor: { colorMap } };
-    }
-    // Markings
-    const loadMarkingsTexture = () => {
-        const colorMap = textureLoader.load('floor/basketball-markings.png');
-        textures = { ...textures, markings: { colorMap } };
-    }
-    // Wall
-    const loadWallTextures = () => {
-        const colorMap = textureLoader.load('wall/BricksPaintedWhite001_COL_2K.jpg');
-        const aoMap = textureLoader.load('wall/BricksPaintedWhite001_AO_2K.jpg');
-        const normalMap = textureLoader.load('wall/BricksPaintedWhite001_NRM_2K.jpg');
-        textures = { ...textures, wall: { colorMap, aoMap, normalMap } };
-    }
-    // Board
-    const loadBoardTextures = () => {
-        const colorMap = textureLoader.load('backboard/backboard.png');
-        textures = { ...textures, board: { colorMap } };
-    }
-    // Load
-    loadFloorTextures();
-    loadMarkingsTexture();
-    loadWallTextures();
-    loadBoardTextures();
-}
+const updateWorker = () => {
+    sendTime = performance.now();
 
-/**
- *  Audio
- */
-const loadAudioFiles = (manager) => {
-    const listener = new THREE.AudioListener();
-    camera.add( listener );
-
-    const audioLoader = new THREE.AudioLoader(manager);
-    bounceSounds = [];
-    hoopHitSounds = [];
-    // Load bounce sounds
-    for (let i = 1; i <= 7; i++) {
-        const bounceSound = new THREE.PositionalAudio( listener );
-        audioLoader.load(`sfx/bounce${i}.mp3`, ( buffer ) => {
-            bounceSound.setBuffer(buffer);
-            bounceSound.setRefDistance( 2 );
-            bounceSounds.push(bounceSound);
-        });
-    }
-    // Load hoop hit sounds
-    for (let i = 1; i <= 3; i++) {
-        const hoopHitSound = new THREE.PositionalAudio( listener );
-        audioLoader.load(`sfx/hoophit${i}.mp3`, ( buffer ) => {
-            hoopHitSound.setBuffer(buffer);
-            hoopHitSound.setRefDistance( 1 );
-            hoopHitSounds.push(hoopHitSound);
-        });
-    }
-}
-
-let isPlayingBounceSound;
-const playBounceSound = (collision) => {
-    if (!isPlayingBounceSound) {
-        const impactStrength = Math.min(collision.contact.getImpactVelocityAlongNormal(), 10);
-        if(impactStrength > 0.5) {
-            const hitSound = bounceSounds[Math.floor(Math.random() * bounceSounds.length)];
-            hitSound.setVolume(impactStrength / 10);
-            hitSound.play();
-            isPlayingBounceSound = setTimeout(() => {
-                isPlayingBounceSound = false;
-            }, hitSound.buffer.duration)
-        }
-    }
-}
-
-let isPlayingHoopHitSound;
-const playHoopHitSound = (collision) => {
-    if (!isPlayingHoopHitSound) {
-        const impactStrength = Math.min(collision.contact.getImpactVelocityAlongNormal(), 10);
-        if(impactStrength > 1.5) {
-            const hitSound = hoopHitSounds[Math.floor(Math.random() * hoopHitSounds.length)];
-            hitSound.setVolume(impactStrength / 10);
-            hitSound.play();
-            isPlayingHoopHitSound = setTimeout(() => {
-                isPlayingHoopHitSound = false;
-            },  250)
-        }
-    }
+    worker.postMessage({
+        type: "UPDATE",
+    });
 }
  
 /** 
@@ -578,7 +454,7 @@ const createControls = () => {
 const onMouseMove = (event) => {
     mouse.x = event.clientX / sizes.width * 2 - 1;
     mouse.y = - (event.clientY / sizes.height) * 2 + 1;
-    if (gplane && mouseConstraint) {
+    if (gplane && isGrabbing) {
         const pos = projectOntoPlane();
         if (pos.x === undefined || pos.y === undefined || pos.z === undefined) return;
         moveJointToPoint(pos.x, pos.y, pos.z);
@@ -586,26 +462,23 @@ const onMouseMove = (event) => {
 }
 
 const onMouseDown = () => {
-    const ballBody = objects.ball.body;
     if (currentIntersect && !isGrabbing) {
+        const { bodyID } = currentIntersect.object.userData;
         document.body.style.cursor = 'grabbing';
         isGrabbing = true;
 
         const pos = currentIntersect.point;
         if (pos.x === undefined || pos.y === undefined || pos.z === undefined) return;
         pos.x = 0;
-        ballBody.angularVelocity = new CANNON.Vec3(0, 0, 0)
         setScreenPerpCenter(pos);
-        addMouseConstraint(pos.x, pos.y, pos.z, ballBody);
+        addMouseConstraint(pos.x, pos.y, pos.z, bodyID);
     }
 }
 
 const onMouseUp = () => {
-    const ballBody = objects.ball.body;
     if (isGrabbing && currentIntersect) {
         document.body.style.cursor = 'grab';
-        const throwDirection = new CANNON.Vec3(ballBody.velocity.x, ballBody.velocity.y, ballBody.velocity.z);
-        ballBody.applyImpulse(new CANNON.Vec3(-Math.min(throwDirection.normalize(), 4), 0, 0), new CANNON.Vec3(0, 0, 0))
+        throwObject();
     } else if (!currentIntersect) {
         document.body.style.cursor = 'default';
     }
@@ -617,7 +490,7 @@ const updateControls = () => {
     raycaster.setFromCamera(mouse, camera);
 
     const ball = objects.ball;
-    const intersects = raycaster.intersectObjects([ball.mesh]);
+    const intersects = raycaster.intersectObjects([ball]);
 
     if (intersects.length > 0) {
         if (!currentIntersect)
@@ -653,32 +526,36 @@ const setScreenPerpCenter = (point) => {
     gplane.quaternion.copy(camera.quaternion);
 }
 
-const addMouseConstraint = (x, y, z, body) => {
-    // The cannon body constrained by the mouse joint
-    constrainedBody = body;
-
-    // Move the cannon click marker particle to the click position
-    jointBody.position.set(x, y, z);
-  
-    // Create a new constraint
-    // The pivot for the jointBody is zero
-    mouseConstraint = new CANNON.PointToPointConstraint(constrainedBody, new CANNON.Vec3(0, 0, 0), jointBody, new CANNON.Vec3(0, 0, 0));
-  
-    // Add the constriant to world
-    world.addConstraint(mouseConstraint);
-  }
-  
-  // This functions moves the transparent joint body to a new postion in space
-const moveJointToPoint = (x, y, z) => {
-    // Move the joint body to a new position
-    jointBody.position.set(x, y, z);
-    mouseConstraint.update();
+// Tell worker to add mouse contraint
+const addMouseConstraint = (x, y, z, bodyID) => {
+    worker.postMessage({
+        type: "ADD_MOUSE_CONTRAINT",
+        payload: {
+            x,
+            y,
+            z,
+            bodyID
+        }
+    });
 }
   
+// Tell worker to move the joint
+const moveJointToPoint = (x, y, z) => {
+    worker.postMessage({
+        type: "MOVE_JOINT",
+        payload: {
+            x,
+            y,
+            z,
+        }
+    });
+}
+
+// Tell worker to remove joint
 const removeJointConstraint = () => {
-    // Remove constriant from world
-    world.removeConstraint(mouseConstraint);
-    mouseConstraint = false;
+    worker.postMessage({
+        type: "REMOVE_JOINT",
+    });
 }
 
 const projectOntoPlane = () => {
@@ -689,24 +566,17 @@ const projectOntoPlane = () => {
     return false;
 }
 
+const throwObject = () => {
+    worker.postMessage({
+        type: "THROW",
+    });
+}
+
 /**
  * Animate scene
  */
 const tick = () =>
 {
-    const elapsedTime = clock.getElapsedTime()
-    const deltaTime = elapsedTime - previousTime
-    previousTime = elapsedTime
-
-    // Update physics
-    world.step(1 / 60, deltaTime, 3)
-
-    for(const object of objectsToUpdate)
-    {
-        object.mesh.position.copy(object.body.position)
-        object.mesh.quaternion.copy(object.body.quaternion)
-    }
-
     // Update camera controls
     controls.update()
 
@@ -714,7 +584,7 @@ const tick = () =>
     updateControls();
     
     // Update the CannonDebugger meshes
-    cannonDebugger.update()
+    // cannonDebugger.update()
 
     // Render
     renderer.render(scene, camera)
