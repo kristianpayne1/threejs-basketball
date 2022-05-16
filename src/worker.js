@@ -1,6 +1,4 @@
 import * as CANNON from 'cannon-es'
-import CannonDebugger from 'cannon-es-debugger'
-import { playBounceSound, playHoopHitSound } from './asset-manager';
 
 const timeStep = 1 / 60;
 const world = new CANNON.World();
@@ -62,7 +60,7 @@ const addBody = (body, update) => {
 }
 
 const createHoop = ({ position, boardPosition }) => {
-    const hoopShape = CANNON.Trimesh.createTorus(0.35, 0.025, 16, 100);
+    const hoopShape = CANNON.Trimesh.createTorus(0.35, 0.025, 16, 75);
     const hoopBody = new CANNON.Body({ mass: 0 });
     hoopBody.position.set(...position);
     hoopBody.addShape(hoopShape, new CANNON.Vec3(0, 0, 0), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(- 1, 0, 0), Math.PI * 0.5));

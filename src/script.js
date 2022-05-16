@@ -2,18 +2,12 @@ import './style.css'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import * as dat from 'lil-gui'
-import { 
-    addBounceSoundsToMesh, 
-    addHitHoopSoundsToMesh, 
-    getModels, 
-    getTextures, 
-    loadAssets,  
-} from './asset-manager';
+import AssetManager from './asset-manager';
 
 let parameters, scene, controls, renderer, camera, clock;
 let directionalLight, ambientLight, objectsToUpdate = [];
 let objects = {}, raycaster, mouse, isGrabbing, currentIntersect
-let gplane, sizes, sendTime, worker
+let gplane, sizes, sendTime, worker, assetManager;
 
 const timeStep = 1 / 60;
 
@@ -79,26 +73,16 @@ const init = () => {
     renderer.outputEncoding = THREE.sRGBEncoding;
 
     /**
-     * Debugger
+     * Asset manager
      */
-    // cannonDebugger = new CannonDebugger(scene, world, {
-    //     onInit(body, mesh) {
-    //         mesh.visible = false;   
-    //         // Toggle visibiliy on "d" press
-    //         document.addEventListener('keydown', (event) => {
-    //         if (event.key === 'd') {
-    //             mesh.visible = !mesh.visible
-    //         }
-    //         })
-    //     },
-    // });
+    assetManager = new AssetManager(camera);
 
     /**
      * Worker
      */
     initialiseWebWorker();
 
-    loadAssets(camera, () => {
+    assetManager.loadAssets(() => {
         // Create stuff
         createGUI();
         createLights();
@@ -131,7 +115,7 @@ const createFloor = () => {
     woodenFloorMesh.rotation.x = - Math.PI * 0.5;
 
     // Textures
-    const { floor: floorTextures, markings: markingsTextures } = getTextures();
+    const { floor: floorTextures, markings: markingsTextures } = assetManager.textures;
     const { colorMap } =floorTextures;
     colorMap.repeat.x = 6;
     colorMap.repeat.y = 6;
@@ -178,14 +162,14 @@ const createBall = () => {
     const position = [0, 1.25, 0];
     const radius = parameters.radius;
 
-    const { ball: ballModel } = getModels();
+    const { ball: ballModel } = assetManager.models;
     const mesh = ballModel;
     mesh.castShadow = true
     mesh.scale.set(radius + 0.05, radius + 0.05, radius + 0.05);
     mesh.userData.bodyID = objectsToUpdate.length;
     scene.add(mesh)
 
-    addBounceSoundsToMesh(mesh);
+    // addBounceSoundsToMesh(mesh);
 
     worker.postMessage({
         type: "CREATE_BALL",
@@ -203,7 +187,7 @@ const createHoop = () => {
     const position = [parameters.hoopPositionX, parameters.hoopPositionY, parameters.hoopPositionZ];
     const mesh = new THREE.Group();
 
-    addHitHoopSoundsToMesh(mesh)
+    // addHitHoopSoundsToMesh(mesh)
 
     // Hoop
     const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.35, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
@@ -217,7 +201,7 @@ const createHoop = () => {
     mesh.add( hoop );
 
     // Backboard
-    const { board: boardTextures } = getTextures();
+    const { board: boardTextures } = assetManager.textures;
     const { colorMap } = boardTextures;
     const boardPosition = [-0.40, 0.36, 0];
     const mat1 = new THREE.MeshBasicMaterial({color: 0xffffff});
@@ -270,7 +254,7 @@ const createWalls = () => {
     const material = new THREE.MeshStandardMaterial();
 
     // Textures
-    const { wall: wallTextures } = getTextures();
+    const { wall: wallTextures } = assetManager.textures;
     const maps = [];
     const { colorMap, aoMap, normalMap } = wallTextures;
     material.map = colorMap;
