@@ -169,7 +169,7 @@ const createBall = () => {
     mesh.userData.bodyID = objectsToUpdate.length;
     scene.add(mesh)
 
-    // addBounceSoundsToMesh(mesh);
+    addBounceSoundsToMesh(mesh);
 
     worker.postMessage({
         type: "CREATE_BALL",
@@ -187,7 +187,7 @@ const createHoop = () => {
     const position = [parameters.hoopPositionX, parameters.hoopPositionY, parameters.hoopPositionZ];
     const mesh = new THREE.Group();
 
-    // addHitHoopSoundsToMesh(mesh)
+    addHitHoopSoundsToMesh(mesh)
 
     // Hoop
     const hoop = new THREE.Mesh( new THREE.TorusGeometry( 0.35, 0.025, 16, 100 ), new THREE.MeshStandardMaterial({
@@ -301,7 +301,27 @@ const initialiseWebWorker = () => {
     worker = new Worker(new URL('./worker.js', import.meta.url));
 
     worker.addEventListener('message', event => {
-        const { positions, quaternions } = event.data;
+        const { type, payload } = event.data;
+
+        switch (type) {
+            case "UPDATE": {
+                update(payload);
+                break;
+            }
+            case "PLAY_SOUND": {
+                playSound(payload);
+                break;
+            }
+            default: {
+                console.warn("Recieved unknown message type " + type);
+            }
+        }
+    })
+}
+
+// update objects in scene
+const update = (data) => {
+    const { positions, quaternions } = data;
 
         // check if we have correct data
         if ((positions.length / 3) !== objectsToUpdate.length) return console.error('Incorrect positions data');
@@ -322,7 +342,6 @@ const initialiseWebWorker = () => {
         // otherwise run it immediatly
         const delay = timeStep * 1000 - (performance.now() - sendTime);
         setTimeout(updateWorker, Math.max(delay, 0));
-    })
 }
 
 const updateWorker = () => {
@@ -331,7 +350,7 @@ const updateWorker = () => {
     worker.postMessage({
         type: "UPDATE",
     });
-}
+};
  
 /** 
  * Lights
@@ -555,6 +574,59 @@ const throwObject = () => {
         type: "THROW",
     });
 }
+
+/**
+ * Audio
+ */
+const playSound = (data) => {
+    const { sound, impactVelocity } = data;
+    switch (sound) {
+        case "BOUNCE": {
+            playBounceSound(impactVelocity);
+            break;
+        }
+        case "HOOP_HIT": {
+            playHoopHitSound(impactVelocity);
+            break;
+        }
+    }
+}
+
+let isPlayingBounceSound;
+const playBounceSound = impactVelocity => {
+    if (!isPlayingBounceSound) {
+        const impactStrength = Math.min(impactVelocity, 10);
+        if(impactStrength > 0.5) {
+            const { bounceSounds } = assetManager.sounds;
+            const hitSound = bounceSounds[Math.floor(Math.random() * bounceSounds.length)];
+            hitSound.setVolume(impactStrength / 10);
+            hitSound.play();
+            isPlayingBounceSound = setTimeout(() => {
+                isPlayingBounceSound = false;
+            }, 250)
+        }
+    }
+}
+
+const addBounceSoundsToMesh = mesh => assetManager.sounds.bounceSounds.forEach(sound =>  mesh.add(sound));
+
+let isPlayingHoopHitSound;
+const playHoopHitSound = impactVelocity => {
+    if (!isPlayingHoopHitSound) {
+        const impactStrength = Math.min(impactVelocity, 10);
+        if(impactStrength > 1.5) {
+            const { hoopHitSounds } = assetManager.sounds;
+            const hitSound = hoopHitSounds[Math.floor(Math.random() * hoopHitSounds.length)];
+            hitSound.setVolume(impactStrength / 10);
+            hitSound.play();
+            isPlayingHoopHitSound = setTimeout(() => {
+                isPlayingHoopHitSound = false;
+            },  250)
+        }
+    }
+}
+
+const addHitHoopSoundsToMesh = mesh => assetManager.sounds.hoopHitSounds.forEach(sound => mesh.add(sound))
 
 /**
  * Animate scene

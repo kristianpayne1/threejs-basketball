@@ -42,8 +42,11 @@ const update = () => {
     // Send data back to the main thread
     self.postMessage(
         {
-          positions,
-          quaternions,
+            type: 'UPDATE',
+            payload: {
+                positions,
+                quaternions,
+            }
         },
         // Specify that we want actually transfer the memory, not copy it over. This is faster.
         [positions.buffer, quaternions.buffer]
@@ -68,7 +71,15 @@ const createHoop = ({ position, boardPosition }) => {
     const boardShape = new CANNON.Box(new CANNON.Vec3(1.825 * 0.5, 1.219 * 0.5, 0.03 * 0.5 ))
     hoopBody.addShape(boardShape, new CANNON.Vec3(...boardPosition), new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI * 0.5))
 
-    // hoopBody.addEventListener('collide', playHoopHitSound);
+    hoopBody.addEventListener('collide', collision => self.postMessage(
+        {
+            type: 'PLAY_SOUND',
+            payload: {
+                sound: "HOOP_HIT",
+                impactVelocity: collision.contact.getImpactVelocityAlongNormal()
+            }
+        },
+    ));
 
     addBody(hoopBody);
 }
@@ -90,7 +101,15 @@ const createBall = ({ radius, position }) => {
     sphereBody.quaternion = quaternion;
 
     sphereBody.sleep();
-    // sphereBody.addEventListener('collide', playBounceSound);
+    sphereBody.addEventListener('collide', collision => self.postMessage(
+        {
+            type: 'PLAY_SOUND',
+            payload: {
+                sound: "BOUNCE",
+                impactVelocity: collision.contact.getImpactVelocityAlongNormal()
+            }
+        },
+    ));
 
     addBody(sphereBody, true);
 }

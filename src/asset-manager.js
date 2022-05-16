@@ -109,38 +109,3 @@ export default class {
         }
     }
 }
-
-let isPlayingBounceSound;
-export const playBounceSound = collision => {
-    if (!isPlayingBounceSound) {
-        const impactStrength = Math.min(collision.contact.getImpactVelocityAlongNormal(), 10);
-        if(impactStrength > 0.5) {
-            console.log(bounceSounds)
-            const hitSound = bounceSounds[Math.floor(Math.random() * bounceSounds.length)];
-            hitSound.setVolume(impactStrength / 10);
-            hitSound.play();
-            isPlayingBounceSound = setTimeout(() => {
-                isPlayingBounceSound = false;
-            }, hitSound.buffer.duration)
-        }
-    }
-}
-
-export const addBounceSoundsToMesh = mesh => bounceSounds.forEach(sound =>  mesh.add(sound));
-
-let isPlayingHoopHitSound;
-export const playHoopHitSound = collision => {
-    if (!isPlayingHoopHitSound) {
-        const impactStrength = Math.min(collision.contact.getImpactVelocityAlongNormal(), 10);
-        if(impactStrength > 1.5) {
-            const hitSound = hoopHitSounds[Math.floor(Math.random() * hoopHitSounds.length)];
-            hitSound.setVolume(impactStrength / 10);
-            hitSound.play();
-            isPlayingHoopHitSound = setTimeout(() => {
-                isPlayingHoopHitSound = false;
-            },  250)
-        }
-    }
-}
-
-export const addHitHoopSoundsToMesh = mesh => hoopHitSounds.forEach(sound => mesh.add(sound))
