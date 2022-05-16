@@ -47,14 +47,14 @@ const init = () => {
      * Camera
      */
     camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100)
-    camera.position.set(2, 1., 0)
+    camera.position.set(-2.5, 1., 0)
     scene.add(camera)
 
     /**
      * Controls
      */
     controls = new OrbitControls(camera, canvas)
-    controls.target.set(0, 1.5, 0)
+    controls.target.set(-5, 1.5, 0)
     controls.enableDamping = true
     controls.enabled = false
 
@@ -66,7 +66,7 @@ const init = () => {
         antialias: true
     })
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    // renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.setSize(sizes.width, sizes.height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.physicallyCorrectLights = true;
@@ -159,7 +159,11 @@ const createFloor = () => {
 }
 
 const createBall = () => {
-    const position = [0, 1.25, 0];
+    const position = [
+        parameters.ballPositionX, 
+        parameters.ballPositionY, 
+        parameters.ballPositionZ
+    ];
     const radius = parameters.radius;
 
     const { ball: ballModel } = assetManager.models;
@@ -373,76 +377,6 @@ const createLights = () => {
 }
 
 /**
- * Create GUI
- */
-const createGUI = () => {
-    parameters = {
-        ambientLightColor: 0xffffff,
-        ambientLightIntensity: 1.5,
-        directionalLightColor: 0xffffff,
-        directionalLightIntensity: 4,
-        directionalLightX: 4,
-        directionalLightY: 4.5,
-        directionalLightZ: 0.5,
-        directionalLightRotX: 0,
-        directionalLightRotY: 0,
-        directionalLightRotZ: 0,
-        radius: 0.24,
-        hoopPositionX: -2.5,
-        hoopPositionY: 3,
-        hoopPositionZ: 0,
-    };
-    
-    const gui = new dat.GUI()
-    gui.hide()
-
-    /**
-     * Key stroke listener
-     */
-    let showGUI = false;
-    window.addEventListener('keydown', (e) => {
-        if (e.key == 'x') {
-            showGUI ? gui.hide() : gui.show();
-            showGUI = !showGUI;
-        }
-        if (e.key === 'c') {
-            controls.enabled = !controls.enabled
-        }
-    })
-
-    const lightsFolder = gui.addFolder('Lights')
-
-    lightsFolder.addColor(parameters, "ambientLightColor").onChange(() => ambientLight.color.set(parameters.ambientLightColor))
-    lightsFolder.add(parameters, "ambientLightIntensity", 0, 10, 0.1).onChange(() => ambientLight.intensity = parameters.ambientLightIntensity)
-    lightsFolder.addColor(parameters, "directionalLightColor").onChange(() => directionalLight.color.set(parameters.directionalLightColor))
-    lightsFolder.add(parameters, "directionalLightIntensity", 0, 10, 0.1).onChange(() => directionalLight.intensity = parameters.directionalLightIntensity)
-    lightsFolder.add(parameters, "directionalLightX", -100, 100, 1).onChange(() => directionalLight.position.set(parameters.directionalLightX, parameters.directionalLightY, parameters.directionalLightZ))
-    lightsFolder.add(parameters, "directionalLightY", -100, 100, 1).onChange(() => directionalLight.position.set(parameters.directionalLightX, parameters.directionalLightY, parameters.directionalLightZ))
-    lightsFolder.add(parameters, "directionalLightZ", -100, 100, 1).onChange(() => directionalLight.position.set(parameters.directionalLightX, parameters.directionalLightY, parameters.directionalLightZ))
-    lightsFolder.add(parameters, "directionalLightRotX", - Math.PI, Math.PI, 0.1).onChange(() => directionalLight.rotation.set(parameters.directionalLightRotX, parameters.directionalLightRotY, parameters.directionalLightRotZ))
-    lightsFolder.add(parameters, "directionalLightRotY", - Math.PI, Math.PI, 0.1).onChange(() => directionalLight.rotation.set(parameters.directionalLightRotX, parameters.directionalLightRotY, parameters.directionalLightRotZ))
-    lightsFolder.add(parameters, "directionalLightRotZ", - Math.PI, Math.PI, 0.1).onChange(() => directionalLight.rotation.set(parameters.directionalLightRotX, parameters.directionalLightRotY, parameters.directionalLightRotZ))
-
-    const objectFolder = gui.addFolder('Objects')
-
-    objectFolder.add(parameters, 'radius', 0.1, 1, 0.1).onChange(() => { 
-        const ball = objects.ball;
-        console.log(ball)
-        ball.mesh.scale.set(parameters.radius, parameters.radius, parameters.radius);
-        ball.body.shapes[0].radius = parameters.radius;
-    })
-    const updateHoopPosition = (axis, value) => {
-        const hoop = objects.hoop;
-        hoop.mesh.position[axis] = value;
-        hoop.body.position[axis] = value;
-
-    }
-    objectFolder.add(parameters, 'hoopPositionX', -10, 10, 0.1).onChange(() => updateHoopPosition('x', parameters.hoopPositionX))
-    objectFolder.add(parameters, 'hoopPositionY', -10, 10, 0.1).onChange(() => updateHoopPosition('y', parameters.hoopPositionY))
-    objectFolder.add(parameters, 'hoopPositionZ', -10, 10, 0.1).onChange(() => updateHoopPosition('z', parameters.hoopPositionZ))
-}
-
-/**
  * Controls
  */
 const createControls = () => {
@@ -472,7 +406,7 @@ const onMouseDown = () => {
 
         const pos = currentIntersect.point;
         if (pos.x === undefined || pos.y === undefined || pos.z === undefined) return;
-        pos.x = 0;
+        pos.x = parameters.ballPositionX;
         setScreenPerpCenter(pos);
         addMouseConstraint(pos.x, pos.y, pos.z, bodyID);
     }
@@ -627,6 +561,85 @@ const playHoopHitSound = impactVelocity => {
 }
 
 const addHitHoopSoundsToMesh = mesh => assetManager.sounds.hoopHitSounds.forEach(sound => mesh.add(sound))
+
+
+/**
+ * Create GUI
+ */
+ const createGUI = () => {
+    parameters = {
+        ambientLightColor: 0xffffff,
+        ambientLightIntensity: 1.5,
+        directionalLightColor: 0xffffff,
+        directionalLightIntensity: 4,
+        directionalLightX: 4,
+        directionalLightY: 4.5,
+        directionalLightZ: 0.5,
+        directionalLightRotX: 0,
+        directionalLightRotY: 0,
+        directionalLightRotZ: 0,
+        radius: 0.24,
+        hoopPositionX: -7.5,
+        hoopPositionY: 3,
+        hoopPositionZ: 0,
+        ballPositionX: -4.5,
+        ballPositionY: 1,
+        ballPositionZ: 0,
+    };
+    
+    const gui = new dat.GUI()
+    gui.hide()
+
+    /**
+     * Key stroke listener
+     */
+    let showGUI = false;
+    window.addEventListener('keydown', (e) => {
+        if (e.key == 'x') {
+            showGUI ? gui.hide() : gui.show();
+            showGUI = !showGUI;
+        }
+        if (e.key === 'c') {
+            controls.enabled = !controls.enabled
+        }
+    })
+
+    const lightsFolder = gui.addFolder('Lights')
+
+    lightsFolder.addColor(parameters, "ambientLightColor").onChange(() => ambientLight.color.set(parameters.ambientLightColor))
+    lightsFolder.add(parameters, "ambientLightIntensity", 0, 10, 0.1).onChange(() => ambientLight.intensity = parameters.ambientLightIntensity)
+    lightsFolder.addColor(parameters, "directionalLightColor").onChange(() => directionalLight.color.set(parameters.directionalLightColor))
+    lightsFolder.add(parameters, "directionalLightIntensity", 0, 10, 0.1).onChange(() => directionalLight.intensity = parameters.directionalLightIntensity)
+    lightsFolder.add(parameters, "directionalLightX", -100, 100, 1).onChange(() => directionalLight.position.set(parameters.directionalLightX, parameters.directionalLightY, parameters.directionalLightZ))
+    lightsFolder.add(parameters, "directionalLightY", -100, 100, 1).onChange(() => directionalLight.position.set(parameters.directionalLightX, parameters.directionalLightY, parameters.directionalLightZ))
+    lightsFolder.add(parameters, "directionalLightZ", -100, 100, 1).onChange(() => directionalLight.position.set(parameters.directionalLightX, parameters.directionalLightY, parameters.directionalLightZ))
+    lightsFolder.add(parameters, "directionalLightRotX", - Math.PI, Math.PI, 0.1).onChange(() => directionalLight.rotation.set(parameters.directionalLightRotX, parameters.directionalLightRotY, parameters.directionalLightRotZ))
+    lightsFolder.add(parameters, "directionalLightRotY", - Math.PI, Math.PI, 0.1).onChange(() => directionalLight.rotation.set(parameters.directionalLightRotX, parameters.directionalLightRotY, parameters.directionalLightRotZ))
+    lightsFolder.add(parameters, "directionalLightRotZ", - Math.PI, Math.PI, 0.1).onChange(() => directionalLight.rotation.set(parameters.directionalLightRotX, parameters.directionalLightRotY, parameters.directionalLightRotZ))
+
+    const objectFolder = gui.addFolder('Objects')
+
+    objectFolder.add(parameters, 'radius', 0.1, 1, 0.1).onChange(() => { 
+        const ball = objects.ball;
+        console.log(ball)
+        ball.scale.set(parameters.radius, parameters.radius, parameters.radius);
+    })
+    const updateHoopPosition = (axis, value) => {
+        const hoop = objects.hoop;
+        hoop.position[axis] = value;
+
+    }
+    const updateBallPosition = (axis, value) => {
+        const ball = objects.ball;
+        ball.position[axis] = value;
+    }
+    objectFolder.add(parameters, 'hoopPositionX', -10, 10, 0.1).onChange(() => updateHoopPosition('x', parameters.hoopPositionX))
+    objectFolder.add(parameters, 'hoopPositionY', -10, 10, 0.1).onChange(() => updateHoopPosition('y', parameters.hoopPositionY))
+    objectFolder.add(parameters, 'hoopPositionZ', -10, 10, 0.1).onChange(() => updateHoopPosition('z', parameters.hoopPositionZ))
+    objectFolder.add(parameters, 'hoopPositionX', -10, 10, 0.1).onChange(() => updateBallPosition('x', parameters.ballPositionX))
+    objectFolder.add(parameters, 'ballPositionY', -10, 10, 0.1).onChange(() => updateBallPosition('y', parameters.ballPositionY))
+    objectFolder.add(parameters, 'ballPositionZ', -10, 10, 0.1).onChange(() => updateBallPosition('z', parameters.ballPositionZ))
+}
 
 /**
  * Animate scene
