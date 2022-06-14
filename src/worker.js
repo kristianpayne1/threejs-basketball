@@ -124,6 +124,15 @@ const createFloor = () => {
     addBody(floorBody);
 }
 
+const createWall = ({ position, rotation }) => {
+    const wallShape = new CANNON.Plane();
+    const wallBody = new CANNON.Body();
+    wallBody.mass = 0;
+    wallBody.addShape(wallShape);
+    wallBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, -1, 0), rotation[1]); 
+    wallBody.position.set(...position);
+}
+
 // Controls
 const shape = new CANNON.Particle();
 const jointBody = new CANNON.Body({
@@ -177,38 +186,15 @@ self.addEventListener('message', (event) => {
     const { type, payload } = event.data;
     
     switch(type) {
-        case "CREATE_HOOP": {
-            createHoop(payload);
-            break;
-        }
-        case "CREATE_BALL": {
-            createBall(payload);
-            break;
-        }
-        case "CREATE_FLOOR": {
-            createFloor(payload);
-            break;
-        }
-        case "UPDATE": {
-            update();
-            break;
-        }
-        case "ADD_MOUSE_CONTRAINT": {
-            addMouseConstraint(payload)
-            break;
-        }
-        case "MOVE_JOINT": {
-            moveJointToPoint(payload);
-            break;
-        }
-        case "REMOVE_JOINT": {
-            removeJointConstraint();
-            break;
-        }
-        case "THROW": {
-            throwBody();
-            break;
-        }
+        case "CREATE_HOOP": return createHoop(payload);
+        case "CREATE_BALL": return createBall(payload);
+        case "CREATE_FLOOR": return createFloor(payload);
+        case "CREATE_WALL": return createWall(payload);
+        case "UPDATE": return update();
+        case "ADD_MOUSE_CONTRAINT": addMouseConstraint(payload);
+        case "MOVE_JOINT": return moveJointToPoint(payload);
+        case "REMOVE_JOINT": return removeJointConstraint();
+        case "THROW": return throwBody();
         default: console.error("Invalid type: " + type);
     }
 })

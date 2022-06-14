@@ -248,9 +248,9 @@ const createHoop = () => {
 const createWalls = () => {
     const walls = new THREE.Group();
     const wallsPosRot = [
-        { position: new THREE.Vector3(0, 4, 6), rotation: new THREE.Vector3(0, Math.PI, 0) },
-        { position: new THREE.Vector3(-10, 4, 0), rotation: new THREE.Vector3(0, Math.PI * 0.5, 0) },
-        { position: new THREE.Vector3(0, 4, -6), rotation: new THREE.Vector3(0, 0, 0) }, 
+        { position: [0, 4, 6], rotation: [0, Math.PI, 0] },
+        { position: [-10, 4, 0], rotation: [0, Math.PI * 0.5, 0] },
+        { position: [0, 4, -6], rotation: [0, 0, 0] }, 
     ];
     
     const geometry = new THREE.PlaneBufferGeometry(20, 10, 200, 100);
@@ -285,12 +285,19 @@ const createWalls = () => {
             material
         );
         const { position, rotation } = wallsPosRot[i]
-        wall.position.copy(position);
-        wall.rotateY(rotation.y)
+        wall.position.copy(new THREE.Vector3(...position));
+        wall.rotateY(rotation[1])
         wall.receiveShadow = true;
         wall.castShadow = true;
 
         walls.add(wall);
+        worker.postMessage({
+            type: 'CREATE_WALL',
+            payload: {
+                position,
+                rotation
+            }
+        });
     }
 
     scene.add(walls);
@@ -308,17 +315,9 @@ const initialiseWebWorker = () => {
         const { type, payload } = event.data;
 
         switch (type) {
-            case "UPDATE": {
-                update(payload);
-                break;
-            }
-            case "PLAY_SOUND": {
-                playSound(payload);
-                break;
-            }
-            default: {
-                console.warn("Recieved unknown message type " + type);
-            }
+            case "UPDATE": return update(payload);
+            case "PLAY_SOUND": return playSound(payload);
+            default: console.warn("Recieved unknown message type " + type);
         }
     })
 }
@@ -515,14 +514,8 @@ const throwObject = () => {
 const playSound = (data) => {
     const { sound, impactVelocity } = data;
     switch (sound) {
-        case "BOUNCE": {
-            playBounceSound(impactVelocity);
-            break;
-        }
-        case "HOOP_HIT": {
-            playHoopHitSound(impactVelocity);
-            break;
-        }
+        case "BOUNCE": return playBounceSound(impactVelocity);
+        case "HOOP_HIT": return playHoopHitSound(impactVelocity);
     }
 }
 
