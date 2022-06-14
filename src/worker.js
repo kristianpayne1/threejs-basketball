@@ -129,8 +129,10 @@ const createWall = ({ position, rotation }) => {
     const wallBody = new CANNON.Body();
     wallBody.mass = 0;
     wallBody.addShape(wallShape);
-    wallBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, -1, 0), rotation[1]); 
+    wallBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), rotation[1]); 
     wallBody.position.set(...position);
+
+    addBody(wallBody);
 }
 
 // Controls
