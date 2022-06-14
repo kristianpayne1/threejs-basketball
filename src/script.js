@@ -251,6 +251,7 @@ const createWalls = () => {
         { position: [0, 4, 6], rotation: [0, Math.PI, 0] },
         { position: [-10, 4, 0], rotation: [0, Math.PI * 0.5, 0] },
         { position: [0, 4, -6], rotation: [0, 0, 0] }, 
+        { position: [10, 4, 0], rotation: [0, -(Math.PI * 0.5), 0] },
     ];
     
     const geometry = new THREE.PlaneBufferGeometry(20, 10, 200, 100);
@@ -279,7 +280,7 @@ const createWalls = () => {
         map.wrapT = THREE.RepeatWrapping;
     })
     
-    for(let i = 0; i < 3; i++) {
+    for(let i = 0; i < 4; i++) {
         const wall = new THREE.Mesh(
             geometry,
             material
